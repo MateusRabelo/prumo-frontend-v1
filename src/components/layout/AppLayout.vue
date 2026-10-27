@@ -42,10 +42,10 @@ function closeOnEscape(event: KeyboardEvent) {
 }
 onMounted(() => window.addEventListener("keydown", closeOnEscape));
 onUnmounted(() => window.removeEventListener("keydown", closeOnEscape));
-function saved() {
+function saved(invoiceLabel?: string) {
   showTransactionModal.value = false;
   revision.value++;
-  feedback.notify("Lançamento salvo.", "success");
+  feedback.notify(invoiceLabel ? `Compra adicionada à fatura de ${invoiceLabel}.` : "Lançamento salvo.", "success");
 }
 </script>
 <template>

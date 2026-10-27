@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { parseMoney } from "@/utils/formatters";
+import { cardCycle } from "@/utils/cardCycle";
+import BankLogo from "@/components/ui/BankLogo.vue";
 import { format } from "date-fns";
 import AppDialog from "@/components/ui/AppDialog.vue";
 import { ref, onMounted, computed, watch } from "vue";
@@ -26,7 +28,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "saved"): void;
+  (e: "saved", invoiceLabel?: string): void;
 }>();
 
 const loading = ref(false);
@@ -51,6 +53,7 @@ const form = ref({
   category_id: props.transaction?.category_id || "",
   account_id: props.transaction?.account_id || props.invoiceContext?.accountId || "",
   destination_account_id: props.transaction?.destination_account_id || "",
+  payment_mode: props.transaction?.payment_mode || (props.invoiceContext ? "CREDIT" : "ACCOUNT"),
   card_id: props.transaction?.card_id || props.invoiceContext?.cardId || "",
   responsible_name: props.transaction?.responsible_name || "",
   is_shared: props.transaction?.is_shared || false,
@@ -60,6 +63,20 @@ const form = ref({
   notes: props.transaction?.notes || "",
 });
 
+const selectedCard = computed(() => cards.value.find(c => c.id === form.value.card_id));
+const credit = computed(() => !!selectedCard.value && form.value.payment_mode === 'CREDIT');
+const targetCycle = computed(() => selectedCard.value && form.value.date ? cardCycle(selectedCard.value, form.value.date) : null);
+watch(selectedCard, (card, old) => {
+  if (!card) { form.value.payment_mode = 'ACCOUNT'; return; }
+  if (card.account_id) form.value.account_id = card.account_id;
+  if (!props.transaction?.payment_mode || (old && old.id !== card.id)) form.value.payment_mode = ['DEBIT','BENEFIT'].includes(card.card_type) ? 'DEBIT' : 'CREDIT';
+  const method = paymentMethods.value.find(m => m.name.toLowerCase().includes(form.value.payment_mode === 'CREDIT' ? 'crédito' : 'débito'));
+  if (method) form.value.payment_method_id = method.id;
+});
+watch(() => form.value.payment_mode, (mode) => {
+  const method = paymentMethods.value.find(m => m.name.toLowerCase().includes(mode === 'CREDIT' ? 'crédito' : mode === 'DEBIT' ? 'débito' : 'pix'));
+  form.value.payment_method_id = method?.id || '';
+});
 const filteredCategories = computed(() => {
   return categories.value.filter(
     (c) => c.type === form.value.type || c.type === "AMBOS",
@@ -85,8 +102,9 @@ onMounted(async () => {
       form.value.account_id = accounts.value[0].id;
     }
     if (!form.value.responsible_name && responsibles.value.length > 0) {
-      form.value.responsible_name = responsibles.value[0].name;
-      form.value.is_shared = responsibles.value[0].is_shared;
+      const own = responsibles.value.find(r => r.is_current_user) || responsibles.value[0];
+      form.value.responsible_name = own.name;
+      form.value.is_shared = own.is_shared;
     }
     if (!form.value.category_id && filteredCategories.value.length > 0) {
       form.value.category_id = filteredCategories.value[0].id;
@@ -110,7 +128,7 @@ function handleResponsibleChange(e: Event) {
 watch(
   () => form.value.type,
   () => {
-    if (form.value.type !== "DESPESA") form.value.card_id = "";
+    if (form.value.type !== "DESPESA") { form.value.card_id = ""; form.value.payment_mode = "ACCOUNT"; }
     if (form.value.type !== "TRANSFERENCIA")
       form.value.destination_account_id = "";
     if (!filteredCategories.value.some((c) => c.id === form.value.category_id))
@@ -164,6 +182,7 @@ async function handleSubmit() {
         ? form.value.destination_account_id || null
         : null,
     card_id: form.value.card_id || null,
+    payment_mode: form.value.card_id ? form.value.payment_mode : "ACCOUNT",
     responsible_name: form.value.responsible_name,
     is_shared: form.value.is_shared,
     classification: form.value.classification,
@@ -174,12 +193,13 @@ async function handleSubmit() {
 
   if (!props.transaction && props.invoiceContext?.invoiceId) payload.invoice_id = props.invoiceContext.invoiceId;
   try {
+    let response;
     if (props.transaction) {
-      await api.put(`/transactions/${props.transaction.id}`, payload);
+      response = await api.put(`/transactions/${props.transaction.id}`, payload);
     } else {
-      await api.post("/transactions/", payload);
+      response = await api.post("/transactions/", payload);
     }
-    emit("saved");
+    emit("saved", response.data.invoice_label);
     emit("close");
   } catch (err: any) {
     error.value =
@@ -250,6 +270,21 @@ async function handleSubmit() {
         </p>
       </div>
       <form @submit.prevent="handleSubmit">
+        <div v-if="form.type === 'DESPESA' && cards.length">
+          <label for="transaction-card">Como foi feita a compra?</label
+          ><select id="transaction-card" v-model="form.card_id" :disabled="!!invoiceContext">
+            <option value="">Pagamento pela conta (Pix, boleto ou dinheiro)</option>
+            <option v-for="card in cards" :key="card.id" :value="card.id">
+              {{ card.name }} · final {{ card.last_digits || "—" }}
+            </option>
+          </select>
+          <div v-if="selectedCard" class="flex items-center gap-3 mt-4"><BankLogo :name="selectedCard.bank_name || selectedCard.name" /><span>{{ selectedCard.name }} · conta vinculada selecionada automaticamente.</span></div>
+          <div v-if="selectedCard?.card_type === 'MULTIPLE' && !invoiceContext" class="mt-4"><label for="transaction-payment-mode">Usar crédito ou débito?</label><select id="transaction-payment-mode" v-model="form.payment_mode"><option value="CREDIT">Crédito — entra na fatura</option><option value="DEBIT">Débito — sai da conta</option></select></div>
+          <p v-if="credit" class="field-help mt-3">{{ invoiceContext ? 'Esta compra ficará na fatura aberta neste editor.' : `Fatura de ${targetCycle?.label}, com vencimento em ${targetCycle?.dueDate.split('-').reverse().join('/')}.` }} O banco será debitado somente no pagamento da fatura.</p>
+          <p v-else-if="selectedCard" class="field-help mt-3">Compra no débito: desconta da conta vinculada quando realizada e não entra na fatura.</p>
+
+        </div>
+
         <div>
           <label for="transaction-description">Descrição</label
           ><input
@@ -293,7 +328,7 @@ async function handleSubmit() {
             ><select
               id="transaction-account"
               v-model="form.account_id"
-              :disabled="initializing"
+              :disabled="initializing || !!selectedCard?.account_id"
               required
             >
               <option value="" disabled>
@@ -370,7 +405,7 @@ async function handleSubmit() {
             </select>
           </div>
           <div>
-            <label for="transaction-status">Situação</label
+            <label for="transaction-status">{{ credit ? "Situação da compra" : "Situação" }}</label
             ><select id="transaction-status" v-model="form.status">
               <option value="REALIZADA">
                 {{
@@ -378,7 +413,7 @@ async function handleSubmit() {
                     ? "Já recebida"
                     : form.type === "TRANSFERENCIA"
                       ? "Já transferida"
-                      : "Já paga"
+                      : credit ? "Compra confirmada na fatura" : form.payment_mode === "DEBIT" ? "Já debitada da conta" : "Já paga"
                 }}
               </option>
               <option value="PENDENTE">Pendente</option>
@@ -387,19 +422,6 @@ async function handleSubmit() {
               </option>
             </select>
           </div>
-        </div>
-        <div v-if="form.type === 'DESPESA' && cards.length">
-          <label for="transaction-card">Compra no cartão?</label
-          ><select id="transaction-card" v-model="form.card_id" :disabled="!!invoiceContext">
-            <option value="">Não, pagamento pela conta</option>
-            <option v-for="card in cards" :key="card.id" :value="card.id">
-              {{ card.name }} · final {{ card.last_digits || "—" }}
-            </option>
-          </select>
-          <p v-if="form.card_id" class="field-help">
-            A compra entra na fatura. O saldo da conta muda quando você paga
-            essa fatura.
-          </p>
         </div>
         <details
           class="form-advanced"

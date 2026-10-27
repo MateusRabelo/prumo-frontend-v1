@@ -412,11 +412,11 @@ onMounted(() => {
               </span>
             </div>
             <p class="text-base text-gray-400 mt-0.5">
-              {{ resp.is_active ? "Ativo" : "Inativo" }}
+              {{ resp.is_system ? (resp.is_current_user ? "Você · sincronizado com seu apelido" : "Sincronizado com os membros do espaço") : (resp.is_active ? "Ativo" : "Inativo") }}
             </p>
           </div>
           <button
-            v-if="auth.canManage"
+            v-if="auth.canManage && (!resp.is_system || resp.user_id)"
             @click="openEditResponsible(resp)"
             class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
           >
@@ -561,7 +561,7 @@ onMounted(() => {
             <input
               v-model="responsibleForm.is_shared"
               type="checkbox"
-              id="is_shared"
+              id="is_shared" :disabled="!!editingResponsible?.is_system"
               class="rounded text-emerald-600 focus:ring-emerald-500"
             />
             <label for="is_shared" class="text-base text-gray-700 font-medium">

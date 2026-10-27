@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { booting, recoverApp } from "@/runtime/recovery";
 import { useAuthStore } from "@/stores/auth";
 
 import AppLayout from "@/components/layout/AppLayout.vue";
@@ -57,7 +58,7 @@ const router = createRouter({
           path: "dashboard",
           name: "dashboard",
           component: DashboardView,
-          meta: { title: "Visão geral" },
+          meta: { title: "Dashboard" },
         },
         {
           path: "transactions",
@@ -121,7 +122,8 @@ router.beforeEach(async (to, _from, next) => {
 
   // If token exists in localStorage but user not loaded yet, fetch user
   if (authStore.token && !authStore.user) {
-    await authStore.fetchMe();
+    try { await authStore.fetchMe(); }
+    catch { recoverApp('Não conseguimos conectar ao servidor agora. Aguarde alguns segundos e tente novamente.'); return next(false); }
   }
 
   const isPublic = to.meta.public;
@@ -137,5 +139,7 @@ router.beforeEach(async (to, _from, next) => {
 
   next();
 });
+router.afterEach(() => { booting.value = false; });
+router.onError(() => recoverApp());
 
 export default router;

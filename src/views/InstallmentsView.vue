@@ -222,10 +222,11 @@ onMounted(() => {
             </p>
           </div>
 
+          <p v-if="(plan.imported_from_number || 1) > 1" class="field-help">Importado a partir da parcela {{ plan.imported_from_number }}/{{ plan.installments_count }}. Apenas esta parcela e as próximas são acompanhadas; as anteriores não foram recriadas.</p>
           <!-- Total & Remaining Badges -->
           <div class="flex items-center gap-4 text-right">
             <div>
-              <span class="text-sm text-slate-400 font-medium">Total:</span>
+              <span class="text-sm text-slate-400 font-medium">{{ (plan.imported_from_number || 1) > 1 ? "Valor acompanhado:" : "Total:" }}</span>
               <p class="text-base font-bold text-slate-900">
                 {{ formatBRL(plan.total_amount) }}
               </p>

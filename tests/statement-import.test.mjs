@@ -86,3 +86,40 @@ test('Nubank summary separates purchases from debt and requires reconciliation a
     assert.equal(body.reconciliation_reviewed, true);
   } finally { await context.close(); await browser.close(); }
 });
+
+test('recognized installments require a category and payments stay in the final summary', async () => {
+  const browser = await chromium.launch();
+  const context = await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+  try {
+    await mockPrumo(context);
+    let saved;
+    await context.route('**/api/v1/imports/**',async route=>{
+      const path=new URL(route.request().url()).pathname;
+      let data=[];
+      if(path.endsWith('/preview')) data={preview_token:'signed',warnings:[],rows:[
+        {index:0,date:'2026-10-27',amount:'50',original_description:'Loja - Parcela 6/6',description:'Loja - Parcela 6/6',type:'DESPESA',category_id:null,blocked:false,duplicate:false,possible_installment:true,installment_info:{number:6,count:6,description:'Loja'}},
+        {index:1,date:'2026-10-06',amount:'147.64',original_description:'Pagamento em 06 OUT',description:'Pagamento em 06 OUT',blocked:true,entry_kind:'payment'}]};
+      if(path.endsWith('/confirm')) {saved=route.request().postDataJSON();data={imported:1,skipped:0};}
+      await route.fulfill({json:data});
+    });
+    const page=await context.newPage();
+    await page.goto(origin+'/import');
+    await page.locator('#import-source').selectOption('card');
+    await page.locator('#import-file').setInputFiles({name:'fatura.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-synthetic')});
+    await page.getByRole('button',{name:/Gerar prévia/}).click();
+    await page.getByRole('region',{name:'Pagamentos e créditos do extrato'}).waitFor();
+    assert.equal(await page.locator('.import-row').count(),1);
+    assert.equal(await page.locator('#import-name-1').count(),0);
+    await page.getByRole('checkbox',{name:/Conferi as datas/}).check();
+    const save=page.getByRole('button',{name:/Salvar 1 lançamentos/});
+    assert.equal(await save.isDisabled(),true);
+    await page.locator('#import-category-0').selectOption({label:'Mercado'});
+    await page.getByRole('checkbox',{name:/Conferi as datas/}).check();
+    assert.equal(await save.isEnabled(),true);
+    await page.screenshot({path:'/tmp/prumo-import-installment-mobile.png',fullPage:true});
+    await save.click();
+    await page.getByRole('heading',{name:'1 lançamentos importados'}).waitFor();
+    assert.equal(saved.entries[0].import_installment,true);
+    assert.equal(saved.entries.length,1);
+  } finally {await context.close();await browser.close();}
+});

@@ -23,6 +23,7 @@ export const useAuthStore = defineStore("auth", () => {
     myFamilies.value.filter((f) => (f.members_count || 1) > 1),
   );
   const familyError = ref("");
+  let initializing: Promise<void> | null = null;
   const isAuthenticated = computed(() => !!token.value);
 
   async function login(email: string, password: string) {
@@ -75,16 +76,21 @@ export const useAuthStore = defineStore("auth", () => {
 
   async function fetchMe() {
     if (!token.value) return;
-    try {
-      const res = await api.get("/auth/me");
-      user.value = res.data;
-      await fetchMyFamilies();
-    } catch (error: any) {
-      if ([401, 403].includes(error.response?.status)) await logout(false);
-      else
-        familyError.value =
-          "Não foi possível atualizar a sessão. Tente novamente.";
-    }
+    if (initializing) return initializing;
+    initializing = (async () => {
+      try {
+        const res = await api.get('/auth/me');
+        user.value = res.data;
+        await fetchMyFamilies();
+      } catch (error: any) {
+        if ([401, 403].includes(error.response?.status)) await logout(false);
+        else {
+          familyError.value = 'A conexão com o servidor demorou. Tente novamente em alguns segundos.';
+          throw error;
+        }
+      }
+    })().finally(() => { initializing = null; });
+    return initializing;
   }
 
   async function fetchMyFamilies() {

@@ -1,0 +1,92 @@
+[
+  {
+    "name": "Banco do Brasil",
+    "ispb": "00000000",
+    "source": "https://www.bb.com.br/docs/pub/inst/img/LogoBB.svg",
+    "file": "00000000.png"
+  },
+  {
+    "name": "Santander",
+    "ispb": "90400888",
+    "source": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg",
+    "file": "90400888.png"
+  },
+  {
+    "name": "Inter",
+    "ispb": "00416968",
+    "source": "https://marketing.bancointer.com.br/arquivos/images/app-icon.svg",
+    "file": "00416968.png"
+  },
+  {
+    "name": "XP Investimentos",
+    "ispb": "02332886",
+    "source": "https://openbanking-redirect.xpi.com.br/assets/xpi.svg",
+    "file": "02332886.png"
+  },
+  {
+    "name": "Caixa",
+    "ispb": "00360305",
+    "source": "https://consentimento.openbanking.caixa.gov.br/assets/images/logomarca_caixa.svg",
+    "file": "00360305.png"
+  },
+  {
+    "name": "BTG Pactual",
+    "ispb": "30306294",
+    "source": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/logo/btginvestimentos/btginvestimentos.svg",
+    "file": "30306294.png"
+  },
+  {
+    "name": "Bradesco",
+    "ispb": "60746948",
+    "source": "https://banco.bradesco/open-finance/logo/icones_vetorial-pf.svg",
+    "file": "60746948.png"
+  },
+  {
+    "name": "Nubank",
+    "ispb": "18236120",
+    "source": "https://nuapp.nubank.com.br/open-banking/logo.svg",
+    "file": "18236120.png"
+  },
+  {
+    "name": "Mercado Pago",
+    "ispb": "10573521",
+    "source": "https://http2.mlstatic.com/open-banking/assets/logo.svg",
+    "file": "10573521.png"
+  },
+  {
+    "name": "C6 Bank",
+    "ispb": "31872495",
+    "source": "https://cdn.c6bank.com.br/open-banking/c6bank-logo.svg",
+    "file": "31872495.png"
+  },
+  {
+    "name": "Itaú",
+    "ispb": "60701190",
+    "source": "https://www.itau.com.br/media/dam/m/4ee2c952e1fa91a2/original/Novo_itau.svg",
+    "file": "60701190.png"
+  },
+  {
+    "name": "PicPay",
+    "ispb": "22896431",
+    "source": "https://picpay.s3.sa-east-1.amazonaws.com/openbanking/picpay-logo-icon-pf.svg",
+    "file": "22896431.png"
+  },
+  {
+    "name": "Neon",
+    "ispb": "20855875",
+    "source": "https://opbk-brasil.s3.sa-east-1.amazonaws.com/neon/logo.svg",
+    "file": "20855875.png"
+  },
+  {
+    "name": "Sicredi",
+    "ispb": "01181521",
+    "source": "https://www.sicredi.com.br/openbanking/app/assets/images/shared/logo/logo_sicredi_512.svg",
+    "file": "01181521.png"
+  },
+  {
+    "name": "Sicoob",
+    "ispb": "02038232",
+    "source": "https://sicoob-openbanking.s3.sa-east-1.amazonaws.com/icone-sicoob.svg",
+    "file": "02038232.png"
+  }
+]

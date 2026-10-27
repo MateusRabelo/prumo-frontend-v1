@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { parseMoney } from "@/utils/formatters";
+import BankLogo from "@/components/ui/BankLogo.vue";
 import AppDialog from "@/components/ui/AppDialog.vue";
 import { useAuthStore } from "@/stores/auth";
 const auth = useAuthStore();
@@ -75,6 +76,7 @@ function openCardInvoices(card: CreditCard) {
 }
 
 const bankPresets = [
+  { name: "Neon", color: "#00C6D8" },
   { name: "Nubank", color: "#8A05BE" },
   { name: "Itaú", color: "#EC7000" },
   { name: "Bradesco", color: "#CC092F" },
@@ -240,6 +242,7 @@ function openEditCard(card: CreditCard) {
 }
 
 async function saveCard() {
+  if (!cardForm.value.account_id) { feedback.notify('Selecione a conta vinculada ao cartão.'); return; }
   const limit = parseMoney(cardForm.value.credit_limit);
   if (!Number.isFinite(limit) || limit < 0) {
     feedback.notify("Informe um limite válido, igual ou maior que zero.");
@@ -474,21 +477,17 @@ onMounted(() => {
         <article v-for="card in cards" :key="card.id" class="credit-panel">
           <header>
             <div class="credit-identity">
-              <span
-                class="account-emblem"
-                :style="{ backgroundColor: card.color || '#0F5B4F' }"
-                ><CardIcon :size="24"
-              /></span>
+              <BankLogo :name="card.bank_name || card.name" :size="48" />
               <div>
                 <h3>{{ card.name }}</h3>
                 <p>
                   {{ card.brand }} · final {{ card.last_digits || "—"
                   }}<span v-if="card.bank_name"> · {{ card.bank_name }}</span>
-                </p>
+                </p><p>{{ ({ CREDIT: 'Crédito', DEBIT: 'Débito', MULTIPLE: 'Crédito e débito', BENEFIT: 'Benefício' })[card.card_type] }} · {{ accounts.find(a => a.id === card.account_id)?.name || 'Vincule uma conta ao editar' }}</p>
               </div>
             </div>
             <div class="credit-actions">
-              <button class="ui-button primary" @click="openCardInvoices(card)">
+              <button v-if="['CREDIT','MULTIPLE'].includes(card.card_type)" class="ui-button primary" @click="openCardInvoices(card)">
                 <Receipt :size="20" />Ver faturas</button
               ><button
                 v-if="auth.canManage"
@@ -579,11 +578,7 @@ onMounted(() => {
           class="bank-account-panel"
         >
           <div class="credit-identity">
-            <span
-              class="account-emblem"
-              :style="{ backgroundColor: acc.color || '#0F5B4F' }"
-              ><Building2 :size="24"
-            /></span>
+            <BankLogo :name="acc.bank_name || acc.name" :size="48" />
             <div>
               <h3>{{ acc.name }}</h3>
               <p>
@@ -653,10 +648,7 @@ onMounted(() => {
               @click="applyBankPreset(p, 'card')"
               class="px-2 py-1 text-base rounded-lg border border-gray-200 hover:border-gray-400 text-gray-700 transition-colors flex items-center gap-1.5"
             >
-              <span
-                class="w-2.5 h-2.5 rounded-full"
-                :style="{ backgroundColor: p.color }"
-              ></span>
+              <BankLogo :name="p.name" :size="28" />
               {{ p.name }}
             </button>
           </div>
@@ -775,6 +767,7 @@ onMounted(() => {
             </div>
           </div>
 
+          <div><label for="card-linked-account" class="block text-base font-semibold mb-2">Conta vinculada ao cartão</label><select id="card-linked-account" v-model="cardForm.account_id" required class="w-full px-3 py-3 border border-gray-200 rounded-lg text-base bg-white"><option value="" disabled>Escolha a conta deste cartão</option><option v-for="account in accounts.filter(a => ['CHECKING','SAVINGS','WALLET'].includes(a.account_type))" :key="account.id" :value="account.id">{{ account.name }}</option></select><p class="field-help mt-2">Compras no débito saem desta conta. Compras no crédito entram na fatura e você escolhe a conta ao pagá-la.</p></div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-base font-semibold text-gray-700 mb-1"
@@ -841,10 +834,7 @@ onMounted(() => {
               @click="applyBankPreset(p, 'account')"
               class="px-2 py-1 text-base rounded-lg border border-gray-200 hover:border-gray-400 text-gray-700 transition-colors flex items-center gap-1.5"
             >
-              <span
-                class="w-2.5 h-2.5 rounded-full"
-                :style="{ backgroundColor: p.color }"
-              ></span>
+              <BankLogo :name="p.name" :size="28" />
               {{ p.name }}
             </button>
           </div>

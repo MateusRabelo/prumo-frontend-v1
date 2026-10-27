@@ -1,7 +1,9 @@
 import axios from "axios";
+import { booting } from "@/runtime/recovery";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:8001/api/v1",
+  timeout: 25000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -26,10 +28,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const path = window.location.pathname;
-      if (path !== "/login" && path !== "/register") {
-        localStorage.removeItem("msfinancas_token");
-        window.location.href = "/login";
+      if (!booting.value && !/\/auth\/(login|register|recover-password|reset-password)$/.test(error.config?.url || '')) {
+        window.dispatchEvent(new Event('prumo:session-expired'));
       }
     }
     return Promise.reject(error);

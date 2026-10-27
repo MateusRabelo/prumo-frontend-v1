@@ -29,7 +29,6 @@ const groups = [
   {
     name: "Dia a dia",
     items: [
-      { name: "Visão geral", path: "/dashboard", icon: LayoutDashboard },
       { name: "Lançamentos", path: "/transactions", icon: ArrowLeftRight },
       { name: "Contas e cartões", path: "/accounts-cards", icon: Wallet },
       { name: "Faturas", path: "/invoices", icon: Receipt },
@@ -91,6 +90,7 @@ async function logout() {
       <X :size="24" />
     </button>
     <SpaceSwitcher @changed="emit('close')" />
+    <RouterLink to="/dashboard" class="sidebar-link dashboard-link" :class="{ active: route.path === '/dashboard' }" :aria-current="route.path === '/dashboard' ? 'page' : undefined" @click="emit('close')"><LayoutDashboard :size="24" /><span>Dashboard</span></RouterLink>
     <nav class="sidebar-links">
       <section v-for="group in groups" :key="group.name">
         <h2>{{ group.name }}</h2>
@@ -124,3 +124,5 @@ async function logout() {
     </div>
   </aside>
 </template>
+
+<style scoped>.dashboard-link { margin: 0 15px 12px; flex-shrink: 0; }</style>

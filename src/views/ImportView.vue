@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '@/services/api';
 import { formatBRL, formatDateBR } from '@/utils/formatters';
 import type { FinancialAccount, CreditCard, Category } from '@/types';
 import { FileUp, Check, ArrowRight, Trash2, Lightbulb, AlertCircle } from 'lucide-vue-next';
 import { useFeedback } from '@/composables/useFeedback';
 interface Row {
-  index: number; date: string; amount: string; original_description: string; description: string;
+  entry_kind?: string; index: number; date: string; amount: string; original_description: string; description: string;
   detectedType: boolean; suggestedCategory: string | null; type: 'RECEITA' | 'DESPESA' | ''; category_id: string | null; blocked: boolean; warning: string;
-  duplicate: boolean; possible_installment?: boolean; refunded_in_statement?: boolean; possible_duplicate: boolean; learned: boolean; selected: boolean; remember: boolean;
+  installment_info?: { number: number; count: number; description: string; matching_plan_id?: string }; import_installment?: boolean; duplicate: boolean; possible_installment?: boolean; refunded_in_statement?: boolean; possible_duplicate: boolean; learned: boolean; selected: boolean; remember: boolean;
 }
 interface StatementSummary { issuer: string; year: number; month: number; purchases: string | null; previous_balance: string | null; amount_due: string | null; recognized_credits: string; recognized_payments: string; totals_match: boolean | null; requires_reconciliation: boolean }
 interface Rule { id: string; merchant: string; description: string }
@@ -27,8 +27,11 @@ const error = ref(''), result = ref<{ imported: number; skipped: number } | null
 const feedback = useFeedback();
 const liquidAccounts = computed(() => accounts.value.filter(a => ['CHECKING', 'SAVINGS', 'WALLET'].includes(a.account_type)));
 const creditCards = computed(() => cards.value.filter(c => ['CREDIT', 'MULTIPLE'].includes(c.card_type)));
+const purchases = computed(() => rows.value.filter(row => !['payment','refund','credit'].includes(row.entry_kind || '')));
+const informational = computed(() => rows.value.filter(row => ['payment','refund','credit'].includes(row.entry_kind || '')));
+watch([cardId, source], () => { const card = cards.value.find(c => c.id === cardId.value); if (source.value === 'card' && card?.account_id) accountId.value = card.account_id; });
 const selected = computed(() => rows.value.filter(row => row.selected && !row.blocked && !row.duplicate));
-const unresolved = computed(() => selected.value.some(row => !row.type || !row.description.trim()));
+const unresolved = computed(() => selected.value.some(row => !row.type || !row.description.trim() || (row.import_installment && !row.category_id && !row.installment_info?.matching_plan_id)));
 const totals = computed(() => selected.value.reduce((total, row) => {
   const cents = Math.round(Number(row.amount) * 100);
   if (row.type === 'RECEITA') total.income += cents;
@@ -61,10 +64,12 @@ async function preview() {
   loading.value = true;
   try {
     const res = await api.post('/imports/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-    rows.value = res.data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.possible_installment && !row.refunded_in_statement, remember: false }));
+    rows.value = res.data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.refunded_in_statement, import_installment: source.value === 'card' && !!row.installment_info, remember: false }));
     for (const row of rows.value) {
       if (row.category_id && !availableCategories(row).some(c => c.id === row.category_id)) row.category_id = null;
     }
+    if (res.data.resolved_card_id) cardId.value = res.data.resolved_card_id;
+    if (res.data.resolved_account_id) accountId.value = res.data.resolved_account_id;
     statement.value = res.data.statement || null; reconciliationReviewed.value = false;
     warnings.value = res.data.warnings; token.value = res.data.preview_token; reviewed.value = false;
   } catch (err: any) { error.value = typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Não foi possível ler o arquivo. Tente exportar novamente pelo banco.'; }
@@ -80,7 +85,7 @@ async function confirmImport() {
   if (saving.value || !reviewed.value || !selected.value.length || unresolved.value || statement.value?.totals_match === false || (statement.value?.requires_reconciliation && !reconciliationReviewed.value)) return;
   saving.value = true; error.value = '';
   try {
-    const res = await api.post('/imports/confirm', { preview_token: token.value, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, remember: row.remember })) });
+    const res = await api.post('/imports/confirm', { preview_token: token.value, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, remember: row.remember, import_installment: !!row.import_installment })) });
     result.value = res.data; reset(); file.value = null; if (fileInput.value) fileInput.value.value = '';
     await loadRules().catch(() => feedback.notify('Lançamentos salvos. Não foi possível atualizar a lista de regras agora.'));
   } catch (err: any) { error.value = typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Não foi possível salvar a importação. Confira os lançamentos antes de tentar novamente.'; }
@@ -107,7 +112,7 @@ async function removeRule(rule: Rule) {
         <div v-if="source === 'card'"><label for="import-card">Cartão da fatura</label><select id="import-card" v-model="cardId" required><option v-for="card in creditCards" :key="card.id" :value="card.id">{{ card.name }}</option></select></div>
         <div><label for="import-month">Mês de referência do arquivo</label><input id="import-month" v-model="referenceMonth" type="month" min="2000-01" max="2100-12" required /></div>
       </div>
-      <p v-if="source === 'card'" class="field-help">As compras vão para as faturas conforme a data e o ciclo do cartão. A conta de referência não será debitada agora. Parcelas já cadastradas devem ser desmarcadas na prévia para evitar duplicação.</p>
+      <p v-if="source === 'card'" class="field-help">As compras vão para as faturas conforme a data e o ciclo do cartão. A conta de referência não será debitada agora. Parcelas reconhecidas podem atualizar um plano existente ou criar o acompanhamento das parcelas restantes, após sua conferência.</p>
       <p v-else class="field-help">Importe somente lançamentos ainda não cadastrados. Transferências entre suas próprias contas devem ser registradas como transferência em Lançamentos, para não aparecerem como renda ou despesa.</p>
       <p class="field-help">O mês ajuda a identificar o ano quando o PDF mostra somente dia e mês. Confira datas de dezembro e janeiro na prévia.</p>
       <label for="import-file" class="import-upload"><FileUp :size="28" /><span><strong>Escolha um PDF, CSV ou OFX</strong><small>PDF com texto selecionável · até 4 MB e 30 páginas · até 500 lançamentos</small></span></label>
@@ -127,7 +132,7 @@ async function removeRule(rule: Rule) {
       </section>
       <div class="import-caution"><AlertCircle :size="22" /><p>Compare com o arquivo original: saldos, totais e linhas não reconhecidas ficam fora da importação. Confira especialmente datas, parcelas e pagamentos de fatura. Possíveis duplicados vêm desmarcados; duplicados de importações anteriores não serão salvos novamente.</p></div>
       <details v-if="warnings.length"><summary>{{ warnings.length }} avisos de leitura — confira no arquivo original</summary><ul><li v-for="warning in warnings" :key="warning">{{ warning }}</li></ul></details>
-      <article v-for="row in rows" :key="row.index" class="import-row" :class="{ excluded: !row.selected || row.blocked || row.duplicate }">
+      <article v-for="row in purchases" :key="row.index" class="import-row" :class="{ excluded: !row.selected || row.blocked || row.duplicate }">
         <div class="import-row-top"><label class="import-check"><input v-model="row.selected" type="checkbox" :disabled="row.blocked || row.duplicate || saving" @change="reviewed = false" /><span>{{ formatDateBR(row.date) }}</span></label><strong>{{ formatBRL(Number(row.amount)) }}</strong><span v-if="row.duplicate">Já importado</span><span v-else-if="row.possible_duplicate">Possível duplicado</span><span v-else-if="row.learned" class="import-learned"><Lightbulb :size="16" />Nome reconhecido</span></div>
         <p class="import-original">No extrato: {{ row.original_description }}</p>
         <div class="import-fields">
@@ -135,10 +140,12 @@ async function removeRule(rule: Rule) {
           <div><label :for="`import-type-${row.index}`">Entrada ou saída</label><select :id="`import-type-${row.index}`" v-model="row.type" :disabled="row.blocked || row.duplicate || saving || row.detectedType" @change="changeType(row)"><option value="" disabled>Defina o tipo</option><option value="DESPESA">Saída / despesa</option><option value="RECEITA">Entrada / receita</option></select></div>
           <div><label :for="`import-category-${row.index}`">Categoria</label><select :id="`import-category-${row.index}`" v-model="row.category_id" :disabled="row.blocked || row.duplicate || saving" @change="row.remember = true; reviewed = false"><option :value="null">Sem categoria</option><option v-for="category in availableCategories(row)" :key="category.id" :value="category.id">{{ category.name }}</option></select></div>
         </div>
-        <p v-if="row.warning" class="import-warning">{{ row.warning }}</p>
+        <label v-if="row.installment_info && source === 'card' && !row.duplicate" class="import-check"><input v-model="row.import_installment" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.installment_info.matching_plan_id ? 'Atualizar o parcelamento existente' : 'Criar acompanhamento deste parcelamento' }} · parcela {{ row.installment_info.number }}/{{ row.installment_info.count }}. Somente esta parcela e as futuras serão acompanhadas; valores futuros são estimados pelo valor desta parcela. Escolha uma categoria para criar o plano.</span></label>
+        <p v-if="row.warning && !row.import_installment" class="import-warning">{{ row.warning }}</p>
         <label v-if="!row.blocked && !row.duplicate" class="import-check"><input v-model="row.remember" type="checkbox" :disabled="saving" /><span>Lembrar este nome e categoria para “{{ row.original_description }}” nas próximas importações deste espaço.</span></label>
       </article>
-      <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída e um nome para todos os lançamentos selecionados.</p><label v-if="statement?.requires_reconciliation" class="import-check"><input v-model="reconciliationReviewed" type="checkbox" :disabled="saving" /><span>Entendi que pagamentos, estornos e saldo anterior não serão lançados automaticamente. Vou conciliá-los em Faturas para que o saldo no Prumo reflita o banco.</span></label><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length || statement?.totals_match === false || (!!statement?.requires_reconciliation && !reconciliationReviewed)" @click="confirmImport">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
+      <section v-if="informational.length" class="import-statement-summary" aria-label="Pagamentos e créditos do extrato"><h3>Pagamentos e créditos reconhecidos</h3><p>Estas movimentações explicam o saldo da fatura e não serão registradas como novas despesas. Confira os pagamentos em Faturas para evitar descontar duas vezes o dinheiro da conta.</p><div v-for="row in informational" :key="row.index" class="import-row-top"><span>{{ formatDateBR(row.date) }} · {{ row.original_description }}</span><strong>{{ formatBRL(Number(row.amount)) }}</strong></div><RouterLink to="/invoices" class="underline">Conferir minhas faturas</RouterLink></section>
+      <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída, nome e a categoria dos novos parcelamentos selecionados.</p><label v-if="statement?.requires_reconciliation" class="import-check"><input v-model="reconciliationReviewed" type="checkbox" :disabled="saving" /><span>Entendi que pagamentos, estornos e saldo anterior não serão lançados automaticamente. Vou conciliá-los em Faturas para que o saldo no Prumo reflita o banco.</span></label><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length || statement?.totals_match === false || (!!statement?.requires_reconciliation && !reconciliationReviewed)" @click="confirmImport">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
     </section>
     <details v-if="rules.length && !token" class="import-rules"><summary>Regras aprendidas neste espaço ({{ rules.length }})</summary><p>Você pode esquecer uma regra para voltar a usar o nome original nas próximas importações.</p><div v-for="rule in rules" :key="rule.id" class="import-rule"><span>{{ rule.merchant }} <ArrowRight :size="16" /> <strong>{{ rule.description }}</strong></span><button type="button" class="icon-button" :aria-label="`Esquecer regra ${rule.description}`" @click="removeRule(rule)"><Trash2 :size="18" /></button></div></details>
   </div>

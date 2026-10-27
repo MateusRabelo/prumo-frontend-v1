@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import { api } from '@/services/api';
 import { formatBRL, formatDateBR } from '@/utils/formatters';
 import type { CreditCard, FinancialAccount, CardInvoiceResponse } from '@/types';
+import { cardCycle } from '@/utils/cardCycle';
+import BankLogo from "@/components/ui/BankLogo.vue";
 import CardInvoiceModal from '@/components/cards/CardInvoiceModal.vue';
 import AppDialog from '@/components/ui/AppDialog.vue';
 import { Receipt, Plus, X, ArrowUpRight, Wallet, AlertCircle } from 'lucide-vue-next';
@@ -28,6 +30,8 @@ const createMonth = ref(period.value);
 const openedPeriod = ref(selectedPeriod.value);
 let requestSequence = 0;
 const creditCards = computed(() => cards.value.filter(c => ['CREDIT', 'MULTIPLE'].includes(c.card_type)));
+const openCycles = computed(() => [...new Map(creditCards.value.map(card => { const cycle = cardCycle(card, `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); return [`${cycle.year}-${String(cycle.month).padStart(2,'0')}`, cycle] as const; })).entries()].filter(([key]) => key !== period.value));
+function selectCycle(key: string) { period.value = key; load(); }
 const coverage = computed(() => data.value && Number(data.value.remaining_amount) > 0
   ? Math.min(100, Math.max(0, Number(data.value.available_for_payment) / Number(data.value.remaining_amount) * 100)) : 100);
 async function load() {
@@ -80,6 +84,7 @@ onMounted(load);
       <button type="button" class="ui-button primary" @click="startCreate"><Plus :size="20" />Cadastrar fatura</button>
     </header>
     <div class="invoice-period"><label for="invoice-month">Mês de vencimento</label><input id="invoice-month" v-model="period" type="month" min="2000-01" max="2100-12" required @change="period && load()" /></div>
+    <div v-if="openCycles.length" class="flex flex-wrap items-center gap-3"><span class="field-help">As compras de hoje entram em:</span><button v-for="[key, cycle] in openCycles" :key="key" type="button" class="ui-button" @click="selectCycle(key)">{{ cycle.label }} →</button></div>
     <div v-if="error" role="alert" class="form-error">{{ error }} <button type="button" class="ui-button" @click="load">Tentar novamente</button></div>
     <p v-else-if="loading" role="status">Conferindo suas faturas e contas…</p>
     <template v-else-if="data">
@@ -105,7 +110,7 @@ onMounted(load);
         <div v-if="!data.invoices.length" class="invoice-empty"><Receipt :size="36" /><h3>Comece pela sua primeira fatura</h3><p>Escolha o cartão e o mês. Depois adicione suas compras, uma a uma, dentro da fatura.</p><button type="button" class="ui-button primary" @click="startCreate">Cadastrar fatura</button></div>
         <div v-else class="invoice-list">
           <article v-for="row in data.invoices" :key="row.invoice.card_id" class="invoice-row">
-            <div class="invoice-row-title"><Receipt :size="24" /><div><h3>{{ row.card_name }}</h3><p>Vence {{ formatDateBR(row.invoice.due_date) }} · {{ row.invoice.items_count }} compras</p></div></div>
+            <div class="invoice-row-title"><BankLogo :name="cards.find(c => c.id === row.invoice.card_id)?.bank_name || row.card_name" /><div><h3>{{ row.card_name }}</h3><p>Vence {{ formatDateBR(row.invoice.due_date) }} · {{ row.invoice.items_count }} compras</p></div></div>
             <div><span class="invoice-state" :class="{ paid: row.invoice.status === 'PAGA' }">{{ ({ PAGA: 'Paga', ABERTA: 'Aberta', FECHADA: 'Fechada', VENCIDA: 'Vencida' })[row.invoice.status] }}</span><p>Total {{ formatBRL(row.invoice.total_amount) }} · Pago {{ formatBRL(row.invoice.paid_amount) }}</p></div>
             <div class="invoice-row-amount"><small>Falta pagar</small><strong>{{ formatBRL(row.invoice.remaining_amount) }}</strong></div>
             <button type="button" class="ui-button" :aria-label="`Abrir fatura ${row.card_name}`" @click="openInvoice(row.invoice)">Ver compras e pagar<ArrowUpRight :size="18" /></button>

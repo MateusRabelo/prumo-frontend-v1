@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { parseMoney } from "@/utils/formatters";
 import AppDialog from "@/components/ui/AppDialog.vue";
-import { ref, onMounted, computed } from "vue";
+import { cardCycle } from "@/utils/cardCycle";
+import { format } from "date-fns";
+import { ref, onMounted, computed, watch } from "vue";
 import { api } from "@/services/api";
 import type {
   Category,
@@ -31,8 +33,8 @@ const form = ref({
   description: "",
   total_amount: "",
   installments_count: 3,
-  purchase_date: new Date().toISOString().split("T")[0],
-  first_due_date: new Date().toISOString().split("T")[0],
+  purchase_date: format(new Date(), "yyyy-MM-dd"),
+  first_due_date: format(new Date(), "yyyy-MM-dd"),
   category_id: "",
   account_id: "",
   card_id: "",
@@ -42,6 +44,12 @@ const form = ref({
   notes: "",
 });
 
+const selectedCard = computed(() => cards.value.find(c => c.id === form.value.card_id));
+watch([selectedCard, () => form.value.purchase_date], ([card]) => {
+  if (!card || !form.value.purchase_date) return;
+  if (card.account_id) form.value.account_id = card.account_id;
+  form.value.first_due_date = cardCycle(card, form.value.purchase_date).dueDate;
+});
 const estimatedInstallmentAmount = computed(() => {
   const num = parseMoney(form.value.total_amount);
   const count = form.value.installments_count;
@@ -62,17 +70,18 @@ onMounted(async () => {
       (c: Category) => c.type === "DESPESA" || c.type === "AMBOS",
     );
     accounts.value = accRes.data;
-    cards.value = cardRes.data;
+    cards.value = cardRes.data.filter((c: CreditCard) => ["CREDIT", "MULTIPLE"].includes(c.card_type));
     paymentMethods.value = payRes.data;
     responsibles.value = respRes.data;
 
     if (categories.value.length > 0)
       form.value.category_id = categories.value[0].id;
     if (accounts.value.length > 0) form.value.account_id = accounts.value[0].id;
-    if (cards.value.length > 0) form.value.card_id = cards.value[0].id;
+    if (cards.value.length === 1) form.value.card_id = cards.value[0].id;
     if (responsibles.value.length > 0) {
-      form.value.responsible_name = responsibles.value[0].name;
-      form.value.is_shared = responsibles.value[0].is_shared;
+      const own = responsibles.value.find(r => r.is_current_user) || responsibles.value[0];
+      form.value.responsible_name = own.name;
+      form.value.is_shared = own.is_shared;
     }
   } catch {
     error.value = "Erro ao carregar dados";
@@ -271,6 +280,7 @@ async function handleSubmit() {
           </div>
         </div>
 
+        <p v-if="selectedCard" class="field-help">Cada parcela será incluída na fatura do cartão no mês do seu vencimento. A conta só será debitada ao pagar a fatura.</p>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-base font-semibold text-slate-700 mb-1"
@@ -289,13 +299,14 @@ async function handleSubmit() {
 
           <div>
             <label class="block text-base font-semibold text-slate-700 mb-1"
-              >Conta para pagamento</label
+              >{{ selectedCard ? "Conta vinculada ao cartão" : "Conta para pagamento" }}</label
             >
             <select
               v-model="form.account_id"
+              :disabled="!!selectedCard?.account_id"
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-base text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
             >
-              <option value="">Não vincular conta</option>
+              <option value="">Selecione uma conta</option>
               <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
                 {{ acc.name }}
               </option>

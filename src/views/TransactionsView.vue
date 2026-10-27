@@ -523,7 +523,7 @@ onMounted(() => {
                 {{ formatDateBR(t.date) }}
               </td>
               <td class="py-3 px-4">
-                <div class="font-bold text-slate-900">{{ t.description }}</div>
+                <div class="font-bold text-slate-900">{{ t.description }}</div><RouterLink v-if="t.card_id && t.payment_mode === 'CREDIT'" to="/invoices" class="text-sm underline text-emerald-800">{{ t.card_name }} · Crédito<span v-if="t.invoice_label"> · {{ t.invoice_label }}</span></RouterLink><p v-else-if="t.card_id" class="text-sm text-slate-500">{{ t.card_name }} · Débito na conta</p>
                 <div
                   v-if="t.notes"
                   class="text-sm text-slate-400 truncate max-w-xs"

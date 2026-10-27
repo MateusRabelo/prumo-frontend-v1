@@ -12,7 +12,7 @@ const authStore = useAuthStore();
 const email = ref("");
 const password = ref("");
 const revealPassword = ref(false);
-const error = ref("");
+const error = ref(route.query.reason === "expired" ? "Sua sessão expirou. Entre novamente para continuar." : "");
 
 async function handleSubmit() {
   if (!email.value || !password.value) {

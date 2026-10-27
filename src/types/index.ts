@@ -102,6 +102,9 @@ export interface PaymentMethod {
 }
 
 export interface ResponsiblePerson {
+  user_id?: string;
+  is_system?: boolean;
+  is_current_user?: boolean;
   id: string;
   family_id: string;
   name: string;
@@ -110,6 +113,9 @@ export interface ResponsiblePerson {
 }
 
 export interface Transaction {
+  payment_mode?: "ACCOUNT" | "CREDIT" | "DEBIT";
+  invoice_id?: string;
+  invoice_label?: string;
   id: string;
   family_id: string;
   date: string;
@@ -165,6 +171,7 @@ export interface Installment {
 }
 
 export interface InstallmentPlan {
+  imported_from_number?: number;
   id: string;
   family_id: string;
   description: string;
