@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
 import { parseMoney } from "@/utils/formatters";
 import { format } from 'date-fns';
 import AppDialog from "@/components/ui/AppDialog.vue";
@@ -32,6 +33,7 @@ import {
   Plus, Pencil, Trash2,
 } from "lucide-vue-next";
 
+const auth = useAuthStore();
 const props = defineProps<{
   card: CreditCard;
   accounts: FinancialAccount[];
@@ -55,7 +57,7 @@ const showItemEditor = ref(false);
 const editingItem = ref<Transaction | null>(null);
 const removingItem = ref<string | null>(null);
 const itemBusy = ref(false);
-const canEditItems = computed(() => !!activeInvoice.value && Number(activeInvoice.value.paid_amount) === 0);
+const canEditItems = computed(() => !!activeInvoice.value && Number(activeInvoice.value.paid_amount) === 0 && activeInvoice.value.status !== 'PAGA');
 const selectedPaymentAccount = computed(() => eligibleAccounts.value.find(a => a.id === payForm.value.account_id));
 const projectedBalance = computed(() => Number(selectedPaymentAccount.value?.current_balance ?? 0) - (parseMoney(payForm.value.amount) || 0));
 const itemContext = computed(() => activeInvoice.value ? {
@@ -90,6 +92,33 @@ async function deleteItem() {
     emit('invoice-paid');
   } catch (err: any) { error.value = err.response?.data?.detail || 'Não foi possível excluir a compra.'; }
   finally { itemBusy.value = false; }
+}
+
+const showExternal = ref(false), externalReverse = ref(false), externalLoading = ref(false);
+const externalPassword = ref(''), externalError = ref('');
+const externalDate = ref(format(new Date(), 'yyyy-MM-dd'));
+const externalExpected = ref(0);
+const currentAlternative = computed(() => invoices.value.find(i => i.is_current && (i.year !== selectedYear.value || i.month !== selectedMonth.value)));
+function openExternal(reverse = false) {
+  if (!activeInvoice.value) return;
+  externalReverse.value = reverse; externalPassword.value = ''; externalError.value = '';
+  externalDate.value = format(new Date(), 'yyyy-MM-dd');
+  externalExpected.value = Number(activeInvoice.value.total_amount);
+  showExternal.value = true;
+}
+function closeExternal() { if (!externalLoading.value) { showExternal.value = false; externalPassword.value = ''; } }
+async function confirmExternal() {
+  if (externalLoading.value || !externalPassword.value) return;
+  externalLoading.value = true; externalError.value = '';
+  try {
+    await api.post(`/cards/${props.card.id}/invoices/${selectedYear.value}/${selectedMonth.value}/external-payment${externalReverse.value ? '/reverse' : ''}`, {
+      password: externalPassword.value, payment_date: externalDate.value, expected_total: externalExpected.value,
+    });
+    showExternal.value = false;
+    await loadInvoiceDetail(selectedYear.value, selectedMonth.value);
+    emit('invoice-paid');
+  } catch (err: any) { externalError.value = typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Não foi possível confirmar. Confira a conexão e tente novamente.'; }
+  finally { externalPassword.value = ''; externalLoading.value = false; }
 }
 
 // Payment Dialog State
@@ -436,13 +465,14 @@ onMounted(() => {
                   <span>
                     Fatura liquidada em
                     {{ formatDateBR(activeInvoice.payment_date || "") }}
-                    <span v-if="activeInvoice.payment_account_name"
+                    <span v-if="activeInvoice.payment_account_name && !activeInvoice.external_settled"
                       >via {{ activeInvoice.payment_account_name }}</span
                     >
                   </span>
                 </div>
               </div>
 
+              <div v-if="activeInvoice.external_settled" class="space-y-3"><p class="text-base">Pagamento confirmado fora do Prumo. Nenhum novo débito bancário foi criado.</p><button v-if="auth.canManage" type="button" class="ui-button" @click="openExternal(true)">Desfazer confirmação</button></div>
               <!-- Action Button: Pay Invoice -->
               <div
                 v-if="activeInvoice.status !== 'PAGA'"
@@ -456,13 +486,12 @@ onMounted(() => {
                   <Wallet class="w-5 h-5" />
                   Pagar fatura
                 </button>
-                <p class="text-sm text-center text-slate-400">
-                  Debita da conta bancária e libera limite
-                </p>
+                <p class="text-sm text-center text-slate-400">Debita da conta bancária e libera limite</p><button v-if="auth.canManage" type="button" class="ui-button" @click="openExternal()">Já paguei</button><p v-if="auth.canManage" class="text-sm text-slate-300 text-center">Confirma um pagamento externo, sem descontar o saldo novamente.</p>
               </div>
             </div>
           </div>
 
+          <section class="context-message my-5"><p>Esta fatura reúne compras de <strong>{{ formatDateBR(activeInvoice.cycle_start_date) }}</strong> até <strong>{{ formatDateBR(activeInvoice.closing_date) }}</strong>, com vencimento em <strong>{{ formatDateBR(activeInvoice.due_date) }}</strong>.</p><p v-if="!activeInvoice.items_count">Nenhuma compra está vinculada a este período. O saldo zero não confirma que uma fatura antiga foi paga.</p><button v-if="currentAlternative" type="button" class="ui-button mt-3" @click="loadInvoiceDetail(currentAlternative.year, currentAlternative.month)">Ver fatura atual: {{ currentAlternative.period_label }} · {{ formatBRL(currentAlternative.total_amount) }}</button></section>
           <!-- Items Breakdown List -->
           <div>
             <div class="flex items-center justify-between mb-3">
@@ -746,6 +775,7 @@ onMounted(() => {
         </form>
       </div>
     </AppDialog>
+    <AppDialog v-if="showExternal" @close="closeExternal"><form class="p-6 sm:p-8 space-y-5 w-full max-w-lg" @submit.prevent="confirmExternal"><h2 class="text-2xl font-bold">{{ externalReverse ? 'Desfazer confirmação externa' : 'Já paguei esta fatura' }}</h2><p>{{ activeInvoice?.period_label }} · {{ card.name }}</p><p>Esta ação {{ externalReverse ? 'reabre a pendência' : 'confirma que o pagamento já aconteceu fora do Prumo' }}. O saldo das contas bancárias permanece igual.</p><p v-if="!externalReverse && externalExpected === 0" class="context-message">Não há compras cadastradas neste mês. Você confirma apenas o encerramento desta fatura; o valor histórico pago não será reconstruído.</p><p v-else-if="!externalReverse">Valor restante a conciliar: <strong>{{ formatBRL(activeInvoice?.remaining_amount || 0) }}</strong>.</p><div v-if="externalError" class="form-error" role="alert">{{ externalError }}</div><div v-if="!externalReverse"><label for="external-payment-date" class="block font-semibold mb-2">Quando você pagou?</label><input id="external-payment-date" v-model="externalDate" type="date" :max="format(new Date(), 'yyyy-MM-dd')" required class="w-full border rounded-lg p-3" /></div><div><label for="external-payment-password" class="block font-semibold mb-2">Senha da sua conta no Prumo</label><input id="external-payment-password" v-model="externalPassword" type="password" autocomplete="current-password" maxlength="128" required :disabled="externalLoading" class="w-full border rounded-lg p-3" /><p class="field-help mt-2">Use a senha da conta conectada, {{ auth.user?.email }}.</p></div><label class="flex gap-3 items-start"><input type="checkbox" required class="mt-1 w-5 h-5" :disabled="externalLoading" /><span>{{ externalReverse ? 'Conferi e quero reabrir esta fatura.' : 'Conferi no banco que esta fatura já está totalmente paga.' }}</span></label><div class="flex flex-wrap justify-end gap-3"><button type="button" class="ui-button" :disabled="externalLoading" @click="closeExternal">Cancelar</button><button type="submit" class="ui-button primary" :disabled="externalLoading">{{ externalLoading ? 'Confirmando…' : externalReverse ? 'Desfazer confirmação' : 'Confirmar que já paguei' }}</button></div></form></AppDialog>
     <TransactionModal v-if="showItemEditor" :transaction="editingItem" :invoice-context="itemContext" @close="showItemEditor = false" @saved="itemSaved" />
   </AppDialog>
 </template>

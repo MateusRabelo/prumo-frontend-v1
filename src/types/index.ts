@@ -406,6 +406,8 @@ export interface CardInvoiceItem {
 }
 
 export interface CardInvoiceResponse {
+  external_settled?: boolean;
+  external_paid_amount?: number;
   cycle_start_date: string;
   id?: string;
   card_id: string;

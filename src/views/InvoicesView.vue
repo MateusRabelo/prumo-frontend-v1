@@ -84,7 +84,7 @@ onMounted(load);
       <button type="button" class="ui-button primary" @click="startCreate"><Plus :size="20" />Cadastrar fatura</button>
     </header>
     <div class="invoice-period"><label for="invoice-month">Mês de vencimento</label><input id="invoice-month" v-model="period" type="month" min="2000-01" max="2100-12" required @change="period && load()" /></div>
-    <div v-if="openCycles.length" class="flex flex-wrap items-center gap-3"><span class="field-help">As compras de hoje entram em:</span><button v-for="[key, cycle] in openCycles" :key="key" type="button" class="ui-button" @click="selectCycle(key)">{{ cycle.label }} →</button></div>
+    <div v-if="openCycles.length" class="flex flex-wrap items-center gap-3"><span class="field-help">O mês acima é o de vencimento. Compras de hoje, após o fechamento, entram em:</span><button v-for="[key, cycle] in openCycles" :key="key" type="button" class="ui-button" @click="selectCycle(key)">{{ cycle.label }} →</button></div>
     <div v-if="error" role="alert" class="form-error">{{ error }} <button type="button" class="ui-button" @click="load">Tentar novamente</button></div>
     <p v-else-if="loading" role="status">Conferindo suas faturas e contas…</p>
     <template v-else-if="data">
@@ -110,7 +110,7 @@ onMounted(load);
         <div v-if="!data.invoices.length" class="invoice-empty"><Receipt :size="36" /><h3>Comece pela sua primeira fatura</h3><p>Escolha o cartão e o mês. Depois adicione suas compras, uma a uma, dentro da fatura.</p><button type="button" class="ui-button primary" @click="startCreate">Cadastrar fatura</button></div>
         <div v-else class="invoice-list">
           <article v-for="row in data.invoices" :key="row.invoice.card_id" class="invoice-row">
-            <div class="invoice-row-title"><BankLogo :name="cards.find(c => c.id === row.invoice.card_id)?.bank_name || row.card_name" /><div><h3>{{ row.card_name }}</h3><p>Vence {{ formatDateBR(row.invoice.due_date) }} · {{ row.invoice.items_count }} compras</p></div></div>
+            <div class="invoice-row-title"><BankLogo :name="cards.find(c => c.id === row.invoice.card_id)?.bank_name || row.card_name" /><div><h3>{{ row.card_name }}</h3><p>Vence {{ formatDateBR(row.invoice.due_date) }} · {{ row.invoice.items_count }} compras</p><p>Compras de {{ formatDateBR(row.invoice.cycle_start_date) }} a {{ formatDateBR(row.invoice.closing_date) }}</p><p v-if="row.invoice.external_settled">Pagamento confirmado fora do Prumo</p></div></div>
             <div><span class="invoice-state" :class="{ paid: row.invoice.status === 'PAGA' }">{{ ({ PAGA: 'Paga', ABERTA: 'Aberta', FECHADA: 'Fechada', VENCIDA: 'Vencida' })[row.invoice.status] }}</span><p>Total {{ formatBRL(row.invoice.total_amount) }} · Pago {{ formatBRL(row.invoice.paid_amount) }}</p></div>
             <div class="invoice-row-amount"><small>Falta pagar</small><strong>{{ formatBRL(row.invoice.remaining_amount) }}</strong></div>
             <button type="button" class="ui-button" :aria-label="`Abrir fatura ${row.card_name}`" @click="openInvoice(row.invoice)">Ver compras e pagar<ArrowUpRight :size="18" /></button>
