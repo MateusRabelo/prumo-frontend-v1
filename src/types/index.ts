@@ -113,6 +113,11 @@ export interface ResponsiblePerson {
 }
 
 export interface Transaction {
+  recurrence_id?: string;
+  is_invoice_payment?: boolean;
+  card_last_digits?: string;
+  invoice_year?: number;
+  invoice_month?: number;
   payment_mode?: "ACCOUNT" | "CREDIT" | "DEBIT";
   invoice_id?: string;
   invoice_label?: string;

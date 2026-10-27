@@ -18,6 +18,7 @@ import {
   ChevronDown,
   X,
   Receipt,
+  Repeat2,
   FileUp,
 } from "lucide-vue-next";
 const props = defineProps<{ mobileOpen?: boolean }>();
@@ -39,6 +40,7 @@ const groups = [
   {
     name: "Planejamento",
     items: [
+      { name: "Assinaturas", path: "/subscriptions", icon: Repeat2 },
       { name: "Orçamentos", path: "/budgets", icon: PieChart },
       { name: "Metas", path: "/goals", icon: Target },
       { name: "Relatórios", path: "/reports", icon: FileText },

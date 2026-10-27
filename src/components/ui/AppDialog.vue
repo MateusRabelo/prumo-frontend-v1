@@ -13,7 +13,7 @@ function associateFields() {
   }
   dialog.value?.querySelectorAll("label:not([for])").forEach((label) => {
     let next = label.nextElementSibling;
-    let field: Element | null = null;
+    let field: Element | null = label.querySelector("input,select,textarea");
     while (next && !field) {
       field = next.matches("input,select,textarea")
         ? next

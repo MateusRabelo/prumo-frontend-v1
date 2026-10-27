@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { api } from '@/services/api';
 import { formatBRL, formatDateBR } from '@/utils/formatters';
 import type { CreditCard, FinancialAccount, CardInvoiceResponse } from '@/types';
@@ -13,8 +14,12 @@ interface Overview {
   paid_amount: number; remaining_amount: number; shortfall: number; balance_after_payment: number;
   invoices: { card_name: string; invoice: CardInvoiceResponse }[];
 }
+const route = useRoute();
+let openedFromLink = false;
+const requestedYear = Number(route.query.year), requestedMonth = Number(route.query.month);
 const now = new Date();
 const period = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+if (Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100 && Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12) period.value = `${requestedYear}-${String(requestedMonth).padStart(2, '0')}`;
 const selectedPeriod = computed(() => ({ year: Number(period.value.split('-')[0]), month: Number(period.value.split('-')[1]) }));
 const data = ref<Overview | null>(null);
 const accounts = ref<FinancialAccount[]>([]);
@@ -45,6 +50,11 @@ async function load() {
     ]);
     if (sequence !== requestSequence) return;
     data.value = overview.data; accounts.value = bank.data; cards.value = card.data;
+    if (!openedFromLink && typeof route.query.card === 'string') {
+      openedFromLink = true;
+      const target = cards.value.find(c => c.id === route.query.card && ['CREDIT','MULTIPLE'].includes(c.card_type));
+      if (target) { openedPeriod.value = selectedPeriod.value; selectedCard.value = target; }
+    }
   } catch (err: any) {
     if (sequence === requestSequence) error.value = err.response?.data?.detail || 'Não foi possível carregar as faturas. Tente novamente.';
   } finally { if (sequence === requestSequence) loading.value = false; }

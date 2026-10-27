@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TransactionCardInfo from "@/components/transactions/TransactionCardInfo.vue";
 import { useFeedback } from "@/composables/useFeedback";
 const feedback = useFeedback();
 import { useRoute } from "vue-router";
@@ -452,7 +453,7 @@ onMounted(() => {
           <p class="text-sm text-slate-500 mt-3">
             {{ transaction.category_name || "Sem categoria" }} ·
             {{ transaction.account_name }}
-          </p>
+          </p><TransactionCardInfo :transaction="transaction" />
           <div class="flex items-center justify-between gap-3 mt-3">
             <span class="text-sm text-slate-500"
               >{{ transaction.responsible_name }} ·
@@ -504,7 +505,7 @@ onMounted(() => {
               <th class="py-3 px-4">Data</th>
               <th class="py-3 px-4">Descrição</th>
               <th class="py-3 px-4">Categoria</th>
-              <th class="py-3 px-4">Conta</th>
+              <th class="py-3 px-4">Conta e cartão</th>
               <th class="py-3 px-4">Responsável</th>
               <th class="py-3 px-4">Status</th>
               <th class="py-3 px-4 text-right">Valor</th>
@@ -523,7 +524,7 @@ onMounted(() => {
                 {{ formatDateBR(t.date) }}
               </td>
               <td class="py-3 px-4">
-                <div class="font-bold text-slate-900">{{ t.description }}</div><RouterLink v-if="t.card_id && t.payment_mode === 'CREDIT'" to="/invoices" class="text-sm underline text-emerald-800">{{ t.card_name }} · Crédito<span v-if="t.invoice_label"> · {{ t.invoice_label }}</span></RouterLink><p v-else-if="t.card_id" class="text-sm text-slate-500">{{ t.card_name }} · Débito na conta</p>
+                <div class="font-bold text-slate-900">{{ t.description }}</div>
                 <div
                   v-if="t.notes"
                   class="text-sm text-slate-400 truncate max-w-xs"
@@ -544,6 +545,7 @@ onMounted(() => {
               </td>
               <td class="py-3 px-4 whitespace-nowrap text-slate-600">
                 {{ t.account_name || "-" }}
+                <TransactionCardInfo :transaction="t" />
               </td>
               <td class="py-3 px-4 whitespace-nowrap">
                 <span

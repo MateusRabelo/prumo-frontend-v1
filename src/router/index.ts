@@ -48,6 +48,7 @@ const router = createRouter({
       component: AppLayout,
       meta: { requiresAuth: true },
       children: [
+        { path: 'subscriptions', name: 'subscriptions', component: () => import('@/views/SubscriptionsView.vue'), meta: { title: 'Assinaturas' } },
         { path: 'import', name: 'import', component: ImportView, meta: { title: 'Importar extrato' } },
         { path: 'invoices', name: 'invoices', component: InvoicesView, meta: { title: 'Faturas' } },
         {

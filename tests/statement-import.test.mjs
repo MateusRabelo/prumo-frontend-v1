@@ -123,3 +123,22 @@ test('recognized installments require a category and payments stay in the final 
     assert.equal(saved.entries.length,1);
   } finally {await context.close();await browser.close();}
 });
+
+test('validation failures identify the rejected field and preserve the review without exposing preview tokens',async()=>{
+  const browser=await chromium.launch();const context=await browser.newContext({serviceWorkers:'block'});
+  try{
+    await mockPrumo(context);
+    await context.route('**/api/v1/imports/**',async route=>{
+      const path=new URL(route.request().url()).pathname;
+      if(path.endsWith('/confirm'))return route.fulfill({status:422,json:{detail:[{loc:['body','preview_token'],type:'value_error',msg:'Value error, Prévia inválida para confirmação',input:'sensitive-preview-token'}]}});
+      return route.fulfill({json:path.endsWith('/preview')?{preview_token:'signed',warnings:[],rows:[{index:0,date:'2026-10-27',amount:'10',original_description:'Compra exemplo',description:'Compra exemplo',type:'DESPESA',category_id:null,blocked:false,duplicate:false}]}:[]});
+    });
+    const page=await context.newPage();await page.goto(origin+'/import');
+    await page.locator('#import-file').setInputFiles({name:'sample.ofx',mimeType:'application/x-ofx',buffer:Buffer.from('<OFX>test</OFX>')});
+    await page.getByRole('button',{name:/Gerar prévia/}).click();await page.getByRole('checkbox',{name:/Conferi as datas/}).check();
+    await page.getByRole('button',{name:/Salvar 1 lançamentos/}).click();
+    await page.getByRole('alert').filter({hasText:/Prévia do extrato/}).waitFor();
+    assert.equal(await page.locator('#import-name-0').inputValue(),'Compra exemplo');
+    assert.doesNotMatch(await page.locator('body').innerText(),/sensitive-preview-token/);
+  }finally{await context.close();await browser.close();}
+});
