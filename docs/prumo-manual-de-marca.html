@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prumo — Manual de marca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--verde:#0F5B4F;--tinta:#0B2420;--latao:#E9A23B;--nevoa:#F2F6F4;--musgo:#D6E6E0;--folha:#2E9E6B;--brasa:#D5503F;--pedra:#5B6B66;--branco:#fff;
+--d:'Bricolage Grotesque',Georgia,sans-serif;--t:'Figtree',system-ui,sans-serif}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{font:400 17px/1.65 var(--t);color:var(--tinta);background:var(--nevoa)}
+a{color:var(--verde)}
+:focus-visible{outline:3px solid var(--latao);outline-offset:2px}
+h1,h2,h3{font-family:var(--d);line-height:1.1;letter-spacing:-.02em}
+h2{font-size:clamp(30px,4vw,44px);font-weight:800;margin-bottom:18px}
+h3{font-size:21px;font-weight:600;margin:32px 0 10px}
+p{max-width:68ch;margin-bottom:14px}
+.side{position:fixed;inset:0 auto 0 0;width:230px;padding:28px 22px;background:var(--branco);border-right:1px solid var(--musgo);overflow:auto}
+.side nav{display:flex;flex-direction:column;gap:2px;margin-top:26px}
+.side a{padding:7px 10px;border-radius:8px;text-decoration:none;color:var(--pedra);font-weight:500;font-size:15px}
+.side a:hover{background:var(--nevoa);color:var(--verde)}
+main{margin-left:230px}
+.hero{position:relative;min-height:92vh;background:var(--verde);color:var(--branco);padding:9vh 7vw;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.hero .big{width:clamp(110px,16vw,190px);color:var(--branco);margin-bottom:28px}
+.hero h1{font-size:clamp(56px,10vw,128px);font-weight:800;letter-spacing:-.05em}
+.hero p{font-size:22px;color:var(--musgo);margin:14px 0 0}
+.plumb{position:absolute;top:0;right:14%;width:2px;height:58%;background:var(--latao);transform-origin:top center;animation:sw 3s ease-out 1}
+.plumb:after{content:"";position:absolute;left:50%;bottom:-14px;width:28px;height:28px;margin-left:-14px;border-radius:50%;background:var(--latao)}
+@keyframes sw{0%{rotate:9deg}25%{rotate:-6deg}50%{rotate:3.5deg}75%{rotate:-1.5deg}100%{rotate:0}}
+section{padding:80px 7vw;border-bottom:1px solid var(--musgo)}
+.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin:20px 0}
+.box{background:var(--branco);border:1px solid var(--musgo);border-radius:14px;padding:22px}
+.box h3{margin-top:0;font-size:19px}
+.box p{font-size:15.5px;margin:0;color:var(--pedra)}
+.stage{display:grid;place-items:center;border-radius:14px;padding:34px 20px;min-height:170px;gap:10px}
+.lock{display:flex;align-items:center;gap:.28em;font:800 44px/1 var(--d);letter-spacing:-.04em}
+.lock svg{width:1.05em;height:1.05em}
+.cap{font-size:14px;color:var(--pedra);margin-top:8px}
+.sw{border:0;cursor:pointer;text-align:left;border-radius:14px;padding:70px 16px 14px;font:500 14px/1.4 var(--t);color:var(--branco);min-height:170px;display:flex;flex-direction:column;justify-content:flex-end}
+.sw b{font:600 20px var(--d)}
+.dark-t{color:var(--tinta)}
+.bar{display:flex;height:46px;border-radius:12px;overflow:hidden;margin:16px 0}
+.bar i{display:block}
+table{border-collapse:collapse;width:100%;max-width:760px;font-size:15.5px;background:var(--branco);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--musgo);vertical-align:top}
+th{background:var(--musgo);font-weight:700}
+.do,.dont{border-radius:14px;padding:18px 20px;font-size:15.5px}
+.do{background:#E3F3EA;border-left:5px solid var(--folha)}
+.dont{background:#FAE6E2;border-left:5px solid var(--brasa)}
+.x{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:16px 0}
+.x div{background:var(--branco);border:1px solid var(--musgo);border-radius:12px;padding:16px;text-align:center;font-size:14px;color:var(--pedra)}
+.x svg{width:64px;height:64px;margin-bottom:8px}
+.btn{font:700 16px var(--t);border:0;border-radius:12px;padding:12px 22px;cursor:pointer}
+.b1{background:var(--verde);color:#fff}.b2{background:var(--musgo);color:var(--verde)}.b3{background:transparent;color:var(--brasa);box-shadow:inset 0 0 0 2px var(--brasa)}
+.chip{display:inline-block;font:700 13px var(--t);padding:4px 12px;border-radius:99px}
+.c-own{background:var(--tinta);color:#fff}.c-adm{background:var(--verde);color:#fff}.c-mem{background:var(--musgo);color:var(--verde)}
+.app{background:var(--branco);border:1px solid var(--musgo);border-radius:18px;padding:22px;max-width:380px}
+.app .s{font-size:14px;color:var(--pedra)}
+.app .v{font:800 38px var(--d);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.tx{display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid var(--musgo);font-size:15px;font-variant-numeric:tabular-nums}
+.pos{color:var(--folha);font-weight:700}.neg{color:var(--brasa);font-weight:700}
+.prog{height:10px;background:var(--musgo);border-radius:9px;overflow:hidden;margin:6px 0 14px}.prog i{display:block;height:100%;background:var(--folha);border-radius:9px}
+pre{background:var(--tinta);color:#D6E6E0;padding:20px;border-radius:14px;overflow-x:auto;font:14px/1.6 ui-monospace,Menlo,monospace;max-width:820px}
+.scroll{overflow-x:auto}
+.toast{position:fixed;bottom:22px;left:50%;translate:-50% 0;background:var(--tinta);color:#fff;padding:10px 18px;border-radius:10px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+@media(max-width:860px){.side{position:static;width:auto;border:0;border-bottom:1px solid var(--musgo)}.side nav{flex-direction:row;flex-wrap:wrap}main{margin-left:0}.plumb{right:8%}}
+@media(prefers-reduced-motion:reduce){.plumb{animation:none}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="m" viewBox="0 0 64 64"><rect x="16" y="6" width="11" height="42" rx="5.5" fill="currentColor"/><circle cx="36" cy="22" r="11.5" fill="none" stroke="currentColor" stroke-width="10"/><circle cx="21.5" cy="57" r="5" fill="var(--dot,#E9A23B)"/></symbol>
+</svg>
+
+<aside class="side">
+<div class="lock" style="font-size:28px;color:var(--verde)"><svg role="img" aria-label="Símbolo Prumo"><use href="#m"/></svg>prumo</div>
+<nav aria-label="Seções">
+<a href="#essencia">Essência</a><a href="#nome">Nome</a><a href="#logo">Logo</a><a href="#cor">Cores</a><a href="#tipografia">Tipografia</a><a href="#componentes">Interface</a><a href="#voz">Voz e tom</a><a href="#aplicacoes">Aplicações</a><a href="#tokens">Tokens de código</a>
+</nav>
+</aside>
+
+<main>
+<header class="hero">
+<div class="plumb" aria-hidden="true"></div>
+<svg class="big" viewBox="0 0 64 64" role="img" aria-label="Símbolo Prumo"><use href="#m"/></svg>
+<h1>prumo</h1>
+<p>Finanças da casa, no eixo. Manual de marca, versão 1.0</p>
+</header>
+
+<section id="essencia">
+<h2>Essência da marca</h2>
+<p>Prumo é um sistema de gestão financeira pessoal e familiar: receitas, despesas, contas, cartões, faturas, parcelamentos, orçamentos e metas, compartilhados em espaços familiares com membros de papéis diferentes.</p>
+<div class="grid">
+<div class="box"><h3>Propósito</h3><p>Dar a cada família uma visão clara e compartilhada do dinheiro, para decidir com calma e manter a casa em equilíbrio.</p></div>
+<div class="box"><h3>Posicionamento</h3><p>O app financeiro que trata dinheiro como assunto de casa, não de planilha. Simples para quem começa, completo para quem controla fatura e parcela.</p></div>
+<div class="box"><h3>Promessa</h3><p>Você sabe onde está o dinheiro, quanto já comprometeu e o que cabe no mês, junto com quem divide a conta.</p></div>
+</div>
+<h3>Valores</h3>
+<div class="grid">
+<div class="box"><h3>Clareza</h3><p>Todo número aparece com contexto: de onde veio, para onde vai, o que falta.</p></div>
+<div class="box"><h3>Equilíbrio</h3><p>Sem culpa nem alarme. O app ajuda a reajustar, não a punir.</p></div>
+<div class="box"><h3>Confiança</h3><p>Papéis e permissões explícitos. Cada pessoa vê e faz só o que lhe cabe.</p></div>
+<div class="box"><h3>Parceria</h3><p>Finanças são conversa em família. O produto facilita esse acordo.</p></div>
+</div>
+<h3>Personalidade</h3>
+<p>Firme e acolhedora. Fala como um vizinho organizado que entende de números: direto, paciente, sem jargão e sem sermão.</p>
+</section>
+
+<section id="nome">
+<h2>O nome</h2>
+<p><b>Prumo</b> é o fio com um peso na ponta que pedreiros usam para garantir que a parede está reta. Daí vêm expressões como “estar no prumo”, “aprumar a vida” e “perder o prumo”, que todo brasileiro entende como equilíbrio e rumo.</p>
+<div class="grid">
+<div class="box"><h3>Por que funciona</h3><p>Duas sílabas, fácil de falar e de lembrar. Carrega a ideia de casa (construção), de alinhamento (orçamento no eixo) e de rumo (metas).</p></div>
+<div class="box"><h3>Pronúncia</h3><p>PRU-mo, com “u” fechado. Sempre escrito em minúsculas no logotipo e com inicial maiúscula em texto corrido: Prumo.</p></div>
+<div class="box"><h3>Assinatura</h3><p>Principal: <b>Finanças da casa, no prumo.</b><br>Alternativas: “Todo mundo no mesmo prumo.” e “Contas claras, família tranquila.”</p></div>
+</div>
+<h3>Nomenclatura do produto</h3>
+<div class="scroll"><table>
+<tr><th>Conceito</th><th>Nome na interface</th></tr>
+<tr><td>Grupo familiar compartilhado</td><td>Espaço (ex.: Espaço Família Souza)</td></tr>
+<tr><td>Papéis</td><td>Proprietário, Administrador, Membro</td></tr>
+<tr><td>Limite de gasto por categoria</td><td>Orçamento</td></tr>
+<tr><td>Objetivo de poupança</td><td>Meta</td></tr>
+<tr><td>Compra dividida</td><td>Parcelamento</td></tr>
+</table></div>
+<h3>Verificações antes de lançar</h3>
+<p>Antes de publicar, consulte a disponibilidade no INPI (classes 9, 36 e 42), nos domínios (.com.br, .app) e nas lojas de aplicativos. Se houver conflito, mantenha o conceito e use “Prumo Família” como alternativa.</p>
+</section>
+
+<section id="logo">
+<h2>Logo</h2>
+<p>O símbolo é um <b>P</b> construído com um fio de prumo: a haste vertical é o fio, o bojo é a moeda (dinheiro) e o ponto em latão, pendurado na ponta, é o peso que mantém tudo alinhado. É geométrico, funciona em tamanhos pequenos e tem um único detalhe de cor.</p>
+<div class="grid">
+<div class="stage" style="background:#fff;border:1px solid var(--musgo);color:var(--verde)"><div class="lock"><svg><use href="#m"/></svg>prumo</div><span class="cap">Versão principal, sobre fundo claro</span></div>
+<div class="stage" style="background:var(--verde);color:#fff"><div class="lock"><svg><use href="#m"/></svg>prumo</div><span class="cap" style="color:var(--musgo)">Versão reversa, sobre verde</span></div>
+<div class="stage" style="background:var(--tinta);color:#fff"><div class="lock"><svg><use href="#m"/></svg>prumo</div><span class="cap" style="color:var(--musgo)">Versão reversa, sobre tinta</span></div>
+<div class="stage" style="background:#fff;border:1px solid var(--musgo);color:#000"><div class="lock" style="--dot:currentColor"><svg><use href="#m"/></svg>prumo</div><span class="cap">Monocromática (impressão, carimbo, fax)</span></div>
+</div>
+<h3>Construção e proteção</h3>
+<p>O símbolo ocupa uma grade de 64 unidades: haste de 11 de largura com cantos arredondados, bojo em anel de raio 11,5 e traço 10, e o ponto de raio 5 centralizado sob a haste. A <b>área de proteção</b> equivale à altura do ponto (5 unidades de 64, ou cerca de 8% do símbolo) multiplicada por 2 em todos os lados; nenhum texto ou borda entra nessa zona. No logotipo horizontal, o espaço entre símbolo e palavra é 0,28 da altura da letra.</p>
+<h3>Tamanhos mínimos</h3>
+<p>Símbolo isolado: 16 px em tela e 6 mm impresso. Logotipo com a palavra: 72 px de largura em tela e 20 mm impresso. Abaixo de 24 px, use o ícone do app (sem a palavra).</p>
+<h3>Ícone do app</h3>
+<div class="x">
+<div><svg viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="#0F5B4F"/><g color="#fff" transform="translate(10 10) scale(.69)"><use href="#m"/></g></svg>Ícone principal</div>
+<div><svg viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="#F2F6F4" stroke="#D6E6E0"/><g color="#0F5B4F" transform="translate(10 10) scale(.69)"><use href="#m"/></g></svg>Ícone claro</div>
+<div><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#0B2420"/><g color="#fff" transform="translate(12 12) scale(.62)"><use href="#m"/></g></svg>Avatar redondo</div>
+</div>
+<h3>Usos incorretos</h3>
+<div class="x">
+<div><svg viewBox="0 0 64 64" style="color:var(--verde);transform:rotate(18deg)"><use href="#m"/></svg>Não gire</div>
+<div><svg viewBox="0 0 64 64" style="color:var(--verde);transform:scaleX(1.5)"><use href="#m"/></svg>Não distorça</div>
+<div><svg viewBox="0 0 64 64" style="color:var(--folha);--dot:var(--brasa)"><use href="#m"/></svg>Não troque as cores</div>
+<div><svg viewBox="0 0 64 64" style="color:var(--latao);background:var(--verde);border-radius:10px;--dot:var(--latao)"><use href="#m"/></svg>Não use latão como cor do símbolo</div>
+</div>
+<p>Também evite: aplicar sombras, contornos ou gradientes, colocar o logo sobre fotos poluídas, redesenhar o ponto como moeda com “R$” e reescrever “prumo” em outra fonte. Na produção, converta a palavra do logotipo em curvas (outline) no arquivo SVG final.</p>
+</section>
+
+<section id="cor">
+<h2>Cores</h2>
+<p>Verde-profundo para confiança e estabilidade, latão para o detalhe humano do fio de prumo. Toque num cartão para copiar o HEX.</p>
+<div class="grid">
+<button class="sw" style="background:#0F5B4F" data-hex="#0F5B4F"><b>Verde Prumo</b>#0F5B4F · RGB 15 91 79<br>Cor principal, botões, símbolo</button>
+<button class="sw" style="background:#0B2420" data-hex="#0B2420"><b>Tinta</b>#0B2420 · RGB 11 36 32<br>Texto principal, papel Proprietário</button>
+<button class="sw dark-t" style="background:#E9A23B" data-hex="#E9A23B"><b>Latão</b>#E9A23B · RGB 233 162 59<br>Destaque único (ponto do logo, alertas suaves)</button>
+<button class="sw dark-t" style="background:#D6E6E0;" data-hex="#D6E6E0"><b>Musgo</b>#D6E6E0 · RGB 214 230 224<br>Superfícies, bordas, fundos de chip</button>
+<button class="sw dark-t" style="background:#F2F6F4;box-shadow:inset 0 0 0 1px #D6E6E0" data-hex="#F2F6F4"><b>Névoa</b>#F2F6F4 · RGB 242 246 244<br>Fundo do app e das páginas</button>
+</div>
+<h3>Cores semânticas</h3>
+<div class="grid">
+<button class="sw" style="background:#2E9E6B;min-height:120px" data-hex="#2E9E6B"><b>Folha</b>#2E9E6B<br>Receita, meta dentro do prazo</button>
+<button class="sw" style="background:#D5503F;min-height:120px" data-hex="#D5503F"><b>Brasa</b>#D5503F<br>Despesa, fatura vencida, erro</button>
+<button class="sw" style="background:#5B6B66;min-height:120px" data-hex="#5B6B66"><b>Pedra</b>#5B6B66<br>Texto secundário e legendas</button>
+</div>
+<h3>Proporção de uso</h3>
+<div class="bar" role="img" aria-label="Névoa 60%, Verde 20%, Musgo 12%, Tinta 6%, Latão 2%">
+<i style="width:60%;background:#F2F6F4;box-shadow:inset 0 0 0 1px #D6E6E0"></i><i style="width:20%;background:#0F5B4F"></i><i style="width:12%;background:#D6E6E0"></i><i style="width:6%;background:#0B2420"></i><i style="width:2%;background:#E9A23B"></i>
+</div>
+<p class="cap">Névoa 60%, Verde 20%, Musgo 12%, Tinta 6%, Latão 2%. O latão aparece em um ponto por tela, no máximo.</p>
+<h3>Acessibilidade</h3>
+<p>Branco sobre Verde Prumo tem contraste acima de 7:1 (AAA). Tinta sobre Névoa passa de 14:1. Latão sobre Verde fica perto de 3,7:1, então use apenas em elementos gráficos grandes, nunca em texto pequeno. Receita e despesa nunca dependem só da cor: sempre acompanhe com sinal (+ ou −) e rótulo.</p>
+</section>
+
+<section id="tipografia">
+<h2>Tipografia</h2>
+<div class="grid">
+<div class="box"><h3 style="font-size:40px;font-weight:800">Bricolage Grotesque</h3><p><b>Títulos e logotipo.</b> Pesos 600 e 800, espaçamento levemente negativo (−2%). Tem personalidade e peso sem ficar fria.</p></div>
+<div class="box"><h3 style="font:700 40px var(--t)">Figtree</h3><p><b>Interface e textos.</b> Pesos 400, 500 e 700. Legível em telas pequenas e com números tabulares, essenciais para valores em colunas.</p></div>
+</div>
+<h3>Escala</h3>
+<div class="scroll"><table>
+<tr><th>Uso</th><th>Fonte</th><th>Tamanho / linha</th></tr>
+<tr><td>Saldo grande</td><td>Bricolage 800</td><td>38–48 / 1,1</td></tr>
+<tr><td>Título de tela</td><td>Bricolage 800</td><td>28 / 1,15</td></tr>
+<tr><td>Subtítulo</td><td>Bricolage 600</td><td>20 / 1,25</td></tr>
+<tr><td>Corpo</td><td>Figtree 400</td><td>16 / 1,5</td></tr>
+<tr><td>Legenda e apoio</td><td>Figtree 500</td><td>14 / 1,4</td></tr>
+</table></div>
+<p style="margin-top:14px">Valores monetários usam <code>font-variant-numeric: tabular-nums</code> e o formato brasileiro: <b>R$ 1.234,56</b>. Texto em sentence case, sem caixa-alta decorativa.</p>
+</section>
+
+<section id="componentes">
+<h2>Interface</h2>
+<p>Cantos de 12 a 18 px, bordas finas em Musgo, sombra quase ausente. O peso visual vem da cor e da tipografia, não de efeitos.</p>
+<h3>Botões</h3>
+<p><button class="btn b1">Registrar despesa</button> <button class="btn b2">Ver fatura</button> <button class="btn b3">Excluir lançamento</button></p>
+<h3>Papéis no espaço familiar</h3>
+<p><span class="chip c-own">Proprietário</span> <span class="chip c-adm">Administrador</span> <span class="chip c-mem">Membro</span></p>
+<div class="scroll"><table>
+<tr><th>Papel</th><th>Cor</th><th>Resumo do que faz</th></tr>
+<tr><td>Proprietário</td><td>Tinta</td><td>Controla o espaço, os membros e a exclusão.</td></tr>
+<tr><td>Administrador</td><td>Verde</td><td>Gerencia contas, cartões, orçamentos e convites.</td></tr>
+<tr><td>Membro</td><td>Musgo</td><td>Registra e consulta o que lhe é liberado.</td></tr>
+</table></div>
+<h3>Exemplo de tela</h3>
+<div class="app">
+<div class="s">Espaço Família Souza · outubro</div>
+<div class="v">R$ 3.482,10</div>
+<div class="s" style="margin-bottom:14px">disponível no mês</div>
+<div class="s">Orçamento de mercado: R$ 1.080 de R$ 1.500</div>
+<div class="prog"><i style="width:72%"></i></div>
+<div class="s">Meta: viagem de julho, 41%</div>
+<div class="prog"><i style="width:41%;background:var(--latao)"></i></div>
+<div class="tx"><span>Salário</span><span class="pos">+ R$ 5.200,00</span></div>
+<div class="tx"><span>Fatura Nubank (vence dia 12)</span><span class="neg">− R$ 842,37</span></div>
+<div class="tx"><span>Geladeira 4/10</span><span class="neg">− R$ 389,90</span></div>
+</div>
+<h3>Ícones e ilustração</h3>
+<p>Ícones de linha com traço de 2 px, pontas e cantos arredondados, na grade de 24 px. O ponto do prumo pode aparecer como detalhe em latão em um ícone por tela (por exemplo, a meta atual). Ilustrações usam formas simples e preenchimentos em Verde, Musgo e Latão, sem rostos realistas.</p>
+</section>
+
+<section id="voz">
+<h2>Voz e tom</h2>
+<p>Falamos em português do dia a dia, em segunda pessoa (“você”), com verbos ativos e frases curtas. Avisamos sem assustar e explicamos como resolver.</p>
+<div class="grid">
+<div class="do"><b>Fazemos</b><br>“Sua fatura do cartão vence amanhã: R$ 842,37.”<br>“Este orçamento já usou 90%. Quer ajustar o limite?”<br>“Maria foi adicionada como Membro.”</div>
+<div class="dont"><b>Evitamos</b><br>“Atenção!!! Você gastou demais.”<br>“Operação realizada com sucesso.”<br>“Você não tem permissão.” (sem explicar o motivo)</div>
+</div>
+<h3>Situações comuns</h3>
+<div class="scroll"><table>
+<tr><th>Situação</th><th>Texto</th></tr>
+<tr><td>Tela vazia de metas</td><td>Nenhuma meta ainda. Crie a primeira e acompanhe o quanto falta.</td></tr>
+<tr><td>Ação confirmada</td><td>Despesa registrada. (o botão dizia “Registrar despesa”)</td></tr>
+<tr><td>Falta de permissão</td><td>Só Administradores podem editar cartões. Peça a um deles ou mude seu papel.</td></tr>
+<tr><td>Orçamento estourado</td><td>Mercado passou R$ 120 do limite. Veja os lançamentos ou ajuste o valor.</td></tr>
+<tr><td>Convite</td><td>Rafael convidou você para o Espaço Família Souza.</td></tr>
+</table></div>
+<p style="margin-top:14px">Regras fixas: nunca culpar a pessoa pelos gastos, nunca usar humor com dívida ou atraso, sempre manter o mesmo nome para a mesma ação em toda a jornada.</p>
+</section>
+
+<section id="aplicacoes">
+<h2>Aplicações</h2>
+<div class="grid">
+<div class="box"><h3>Tela de abertura</h3><p>Fundo Verde Prumo, símbolo branco centralizado com o ponto em latão. O ponto balança uma vez ao abrir (cerca de 1 s) e para.</p></div>
+<div class="box"><h3>Lojas de aplicativos</h3><p>Ícone principal. Capturas de tela sobre Névoa, com títulos em Bricolage 800, uma frase por tela (“Cada fatura, no seu prazo.”).</p></div>
+<div class="box"><h3>Notificações</h3><p>Ícone monocromático do símbolo. Título curto e valor: “Fatura vence amanhã” + “R$ 842,37”.</p></div>
+<div class="box"><h3>E-mails e documentos</h3><p>Cabeçalho branco com logotipo principal, corpo em Figtree 16 px, botão em Verde Prumo e rodapé em Pedra.</p></div>
+<div class="box"><h3>Redes sociais</h3><p>Avatar redondo em Tinta. Posts com fundo Verde ou Névoa, uma ideia por peça e o latão como único destaque.</p></div>
+<div class="box"><h3>Movimento</h3><p>Só quando ajuda: balanço do prumo na abertura, barras de progresso que preenchem ao registrar um valor. Respeitar o ajuste de “reduzir movimento” do sistema.</p></div>
+</div>
+</section>
+
+<section id="tokens">
+<h2>Tokens de código</h2>
+<p>Use estes valores no web e no mobile para manter a marca consistente.</p>
+<h3>CSS</h3>
+<pre>:root{
+  --prumo-verde:#0F5B4F;  --prumo-tinta:#0B2420;
+  --prumo-latao:#E9A23B;  --prumo-musgo:#D6E6E0;
+  --prumo-nevoa:#F2F6F4;  --prumo-folha:#2E9E6B;
+  --prumo-brasa:#D5503F;  --prumo-pedra:#5B6B66;
+  --raio-sm:12px; --raio-md:14px; --raio-lg:18px;
+  --fonte-titulo:'Bricolage Grotesque',sans-serif;
+  --fonte-texto:'Figtree',system-ui,sans-serif;
+}</pre>
+<h3>React Native</h3>
+<pre>export const theme = {
+  colors: {
+    primary: '#0F5B4F', ink: '#0B2420', accent: '#E9A23B',
+    surface: '#D6E6E0', background: '#F2F6F4',
+    income: '#2E9E6B', expense: '#D5503F', muted: '#5B6B66',
+  },
+  radius: { sm: 12, md: 14, lg: 18 },
+  fonts: { title: 'BricolageGrotesque_800ExtraBold', body: 'Figtree_400Regular' },
+};</pre>
+<h3>SVG do símbolo</h3>
+<pre>&lt;svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"&gt;
+  &lt;rect x="16" y="6" width="11" height="42" rx="5.5" fill="#0F5B4F"/&gt;
+  &lt;circle cx="36" cy="22" r="11.5" fill="none" stroke="#0F5B4F" stroke-width="10"/&gt;
+  &lt;circle cx="21.5" cy="57" r="5" fill="#E9A23B"/&gt;
+&lt;/svg&gt;</pre>
+<p style="margin-top:20px" class="cap">Prumo, manual de marca v1.0.</p>
+</section>
+</main>
+<div class="toast" id="t" role="status" aria-live="polite"></div>
+<script>
+document.querySelectorAll('.sw').forEach(function(b){b.addEventListener('click',function(){
+var h=b.dataset.hex,t=document.getElementById('t');
+try{navigator.clipboard.writeText(h)}catch(e){}
+t.textContent=h+' copiado';t.classList.add('on');setTimeout(function(){t.classList.remove('on')},1400);
+})});
+</script>
+</body>
+</html>

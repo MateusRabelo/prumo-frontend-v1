@@ -1,0 +1,116 @@
+- generic [ref=f1e3]:
+  - link "Ir para o conteúdo" [ref=f1e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary "Navegação principal" [ref=f1e5]:
+    - link "MSFinanças Seu dinheiro, em ordem." [ref=f1e6] [cursor=pointer]:
+      - /url: /dashboard
+      - generic [ref=f1e11]:
+        - text: MSFinanças
+        - generic [ref=f1e12]: Seu dinheiro, em ordem.
+    - generic [ref=f1e13]:
+      - text: Você está em
+      - combobox "Espaço financeiro ativo" [ref=f1e15] [cursor=pointer]:
+        - option "Família Sofia" [selected]
+        - option "Família Mateus"
+      - paragraph [ref=f1e16]: Só você neste espaço
+      - link "2 espaços disponíveis" [ref=f1e18] [cursor=pointer]:
+        - /url: /family
+    - navigation [ref=f1e19]:
+      - generic [ref=f1e20]:
+        - heading "Dia a dia" [level=2] [ref=f1e21]
+        - link "Visão geral" [ref=f1e22] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Lançamentos" [ref=f1e29] [cursor=pointer]:
+          - /url: /transactions
+        - link "Contas e cartões" [ref=f1e34] [cursor=pointer]:
+          - /url: /accounts-cards
+        - link "Parcelamentos" [ref=f1e39] [cursor=pointer]:
+          - /url: /installments
+      - generic [ref=f1e43]:
+        - heading "Planejamento" [level=2] [ref=f1e44]
+        - link "Orçamentos" [ref=f1e45] [cursor=pointer]:
+          - /url: /budgets
+        - link "Metas" [ref=f1e50] [cursor=pointer]:
+          - /url: /goals
+        - link "Relatórios" [ref=f1e56] [cursor=pointer]:
+          - /url: /reports
+      - generic [ref=f1e61]:
+        - heading "Seu espaço" [level=2] [ref=f1e62]
+        - link "Família e acesso" [ref=f1e63] [cursor=pointer]:
+          - /url: /family
+        - link "Preferências" [ref=f1e70] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=f1e75]:
+      - generic [ref=f1e76]: S
+      - generic [ref=f1e77]:
+        - strong [ref=f1e78]: Sofia Andrade
+        - generic [ref=f1e79]: Proprietário
+      - button "Sair de todas as sessões" [ref=f1e80] [cursor=pointer]
+  - generic [ref=f1e84]:
+    - banner [ref=f1e85]:
+      - generic [ref=f1e87]:
+        - generic [ref=f1e88]: Seu espaço
+        - strong [ref=f1e91]: Família e acesso
+      - link "Família Sofia" [ref=f1e93] [cursor=pointer]:
+        - /url: /family
+    - main [ref=f1e98]:
+      - generic [ref=f1e100]:
+        - generic [ref=f1e101]:
+          - generic [ref=f1e102]:
+            - paragraph [ref=f1e103]: SEU ESPAÇO
+            - heading "Família e acesso" [level=1] [ref=f1e104]
+            - paragraph [ref=f1e105]: Saiba com quem você divide as finanças e escolha o espaço que quer acompanhar.
+          - button "Tenho um convite" [ref=f1e106] [cursor=pointer]
+        - generic [ref=f1e110]:
+          - generic [ref=f1e111]:
+            - region [ref=f1e112]:
+              - generic [ref=f1e113]: Espaço ativo
+              - heading "Família Sofia" [level=2] [ref=f1e120]
+              - paragraph [ref=f1e121]: Por enquanto, só você tem acesso aos dados deste espaço.
+              - generic [ref=f1e122]:
+                - generic [ref=f1e123]:
+                  - strong [ref=f1e124]: —
+                  - generic [ref=f1e125]: pessoas com acesso
+                - generic [ref=f1e126]:
+                  - strong [ref=f1e127]: Proprietário
+                  - generic [ref=f1e128]: seu papel aqui
+                - generic [ref=f1e129]:
+                  - strong [ref=f1e130]: BRL
+                  - generic [ref=f1e131]: moeda do espaço
+            - region [ref=f1e132]:
+              - generic [ref=f1e133]:
+                - generic [ref=f1e134]:
+                  - heading "Quem tem acesso" [level=2] [ref=f1e135]
+                  - paragraph [ref=f1e136]: Permissões válidas apenas para Família Sofia.
+                - button "Convidar pessoa" [ref=f1e137] [cursor=pointer]
+              - generic "Carregando integrantes" [ref=f1e139]
+              - paragraph [ref=f1e146]: Administradores gerenciam contas, configurações e convites. Membros consultam as finanças e registram lançamentos.
+            - region [ref=f1e147]:
+              - generic [ref=f1e148]:
+                - generic [ref=f1e149]:
+                  - heading "Convites criados" [level=2] [ref=f1e150]
+                  - paragraph [ref=f1e151]: Um convite só pode ser aceito pela conta do e-mail indicado.
+                - generic [ref=f1e152]: "0"
+          - complementary [ref=f1e153]:
+            - region [ref=f1e154]:
+              - generic [ref=f1e156]:
+                - heading "Seus espaços" [level=2] [ref=f1e157]
+                - paragraph [ref=f1e158]: Você participa de 2 espaços.
+              - button "Família Sofia Só você" [ref=f1e159] [cursor=pointer]:
+                - generic [ref=f1e164]:
+                  - strong [ref=f1e165]: Família Sofia
+                  - generic [ref=f1e166]: Só você
+              - button "Família Mateus 2 pessoas · Compartilhado" [ref=f1e169] [cursor=pointer]:
+                - generic [ref=f1e176]:
+                  - strong [ref=f1e177]: Família Mateus
+                  - generic [ref=f1e178]: 2 pessoas · Compartilhado
+              - paragraph [ref=f1e182]: Trocar de espaço muda os lançamentos, contas e metas que você vê. Os dados continuam separados.
+            - generic [ref=f1e183]:
+              - heading "Seu espaço compartilhado já está aqui" [level=3] [ref=f1e189]
+              - paragraph [ref=f1e190]: Você já tem acesso a Família Mateus. Abra esse espaço para acompanhar as finanças em conjunto.
+              - button "Abrir espaço compartilhado" [ref=f1e191] [cursor=pointer]
+            - generic [ref=f1e194]:
+              - heading "Responsável é diferente de integrante" [level=3] [ref=f1e197]
+              - paragraph [ref=f1e198]: O responsável identifica de quem é um lançamento. Só as pessoas em “Quem tem acesso” podem entrar neste espaço com a própria conta.
+              - link "Ver responsáveis" [ref=f1e199] [cursor=pointer]:
+                - /url: /settings
