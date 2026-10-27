@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
+import BankLogo from "@/components/ui/BankLogo.vue";
 import { parseMoney } from "@/utils/formatters";
 import { format } from 'date-fns';
 import AppDialog from "@/components/ui/AppDialog.vue";
@@ -298,7 +299,7 @@ onMounted(() => {
             class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
             :style="{ background: card.color || '#1e293b' }"
           >
-            <Receipt class="w-5 h-5" />
+            <BankLogo :name="card.bank_name || card.name" :size="36"/>
           </div>
           <div>
             <div class="flex items-center gap-2">

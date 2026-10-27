@@ -44,7 +44,7 @@ export interface Category {
   name: string;
   color: string;
   icon: string;
-  classification: "NECESSIDADE" | "DESEJO" | "INVESTIMENTO";
+  classification: "NECESSIDADE" | "DESEJO" | "INVESTIMENTO" | "OUTRO";
   type: "DESPESA" | "RECEITA" | "AMBOS";
   order_index: number;
   is_active: boolean;
@@ -115,6 +115,8 @@ export interface ResponsiblePerson {
 export interface Transaction {
   recurrence_id?: string;
   is_invoice_payment?: boolean;
+  card_bank_name?: string;
+  account_bank_name?: string;
   card_last_digits?: string;
   invoice_year?: number;
   invoice_month?: number;
@@ -138,7 +140,7 @@ export interface Transaction {
   card_name?: string;
   responsible_name: string;
   is_shared: boolean;
-  classification: "NECESSIDADE" | "DESEJO" | "INVESTIMENTO";
+  classification: "NECESSIDADE" | "DESEJO" | "INVESTIMENTO" | "OUTRO";
   payment_method_id?: string;
   payment_method_name?: string;
   status: "REALIZADA" | "PENDENTE" | "VENCIDA";
@@ -222,6 +224,8 @@ export interface InstallmentCalendarMonth {
 }
 
 export interface Budget503020 {
+  other_spent?: number;
+  total_committed?: number;
   id: string;
   year: number;
   month: number;

@@ -18,7 +18,7 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  if (familyId) {
+  if (familyId && !config.headers["X-Family-Id"]) {
     config.headers["X-Family-Id"] = familyId;
   }
   return config;

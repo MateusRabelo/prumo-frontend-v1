@@ -139,6 +139,7 @@ const classificationChartData = computed(() => {
     NECESSIDADE: "Necessidades (50%)",
     DESEJO: "Desejos (30%)",
     INVESTIMENTO: "Investimentos (20%)",
+    OUTRO: "Outros",
   };
   return {
     labels: metrics.value.classification_spending.map(

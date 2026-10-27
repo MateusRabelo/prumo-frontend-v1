@@ -175,7 +175,7 @@ async function handleSubmit() {
     type: form.value.type,
     amount: amtNum,
     date: form.value.date,
-    category_id: form.value.category_id || null,
+    category_id: form.value.type === 'TRANSFERENCIA' ? null : form.value.category_id || null,
     account_id: form.value.account_id,
     destination_account_id:
       form.value.type === "TRANSFERENCIA"
@@ -185,8 +185,8 @@ async function handleSubmit() {
     payment_mode: form.value.card_id ? form.value.payment_mode : "ACCOUNT",
     responsible_name: form.value.responsible_name,
     is_shared: form.value.is_shared,
-    classification: form.value.classification,
-    payment_method_id: form.value.payment_method_id || null,
+    classification: form.value.type === 'TRANSFERENCIA' ? 'OUTRO' : form.value.classification,
+    payment_method_id: form.value.type === 'TRANSFERENCIA' ? null : form.value.payment_method_id || null,
     status: form.value.status,
     notes: form.value.notes || null,
   };
@@ -220,9 +220,6 @@ async function handleSubmit() {
       >
         <div>
           <h2>{{ invoiceContext ? (transaction ? "Editar compra da fatura" : "Adicionar compra à fatura") : (transaction ? "Editar lançamento" : "Novo lançamento") }}</h2>
-          <p class="text-slate-500 mt-2">
-            Uma conta registrada, um mês mais claro.
-          </p>
         </div>
         <button
           type="button"
@@ -423,16 +420,17 @@ async function handleSubmit() {
             </select>
           </div>
         </div>
-        <details
+        <div v-if="form.type === 'TRANSFERENCIA'" class="mt-5"><label for="transaction-notes">Observações</label><textarea id="transaction-notes" v-model="form.notes" rows="2" placeholder="Algo que vale lembrar sobre esta transferência" /></div>
+        <details v-else
           class="form-advanced"
           :open="Boolean(transaction?.notes || transaction?.payment_method_id)"
         >
           <summary>
             Mais detalhes
-            <span>Forma de pagamento, orçamento e observações</span>
+            <span>{{ selectedCard ? 'Orçamento e observações' : form.type === 'DESPESA' ? 'Pagamento, orçamento e observações' : 'Pagamento e observações' }}</span>
           </summary>
           <div class="grid grid-cols-2 mt-5">
-            <div>
+            <div v-if="!selectedCard">
               <label for="transaction-method">Forma de pagamento</label
               ><select id="transaction-method" v-model="form.payment_method_id">
                 <option value="">Não informar</option>
@@ -445,7 +443,7 @@ async function handleSubmit() {
                 </option>
               </select>
             </div>
-            <div>
+            <div v-if="form.type === 'DESPESA'">
               <label for="transaction-classification">Parte do orçamento</label
               ><select
                 id="transaction-classification"
@@ -453,7 +451,7 @@ async function handleSubmit() {
               >
                 <option value="NECESSIDADE">Necessidades</option>
                 <option value="DESEJO">Desejos</option>
-                <option value="INVESTIMENTO">Investimentos</option>
+                <option value="OUTRO">Outro</option><option value="INVESTIMENTO">Investimentos</option>
               </select>
             </div>
           </div>

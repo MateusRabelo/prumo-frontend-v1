@@ -147,7 +147,7 @@ onMounted(() => {
           Orçamentos
         </h1>
         <p class="text-base text-slate-500">
-          Defina sua regra 50/30/20 e tetos mensais por categoria
+          Defina sua regra 50/30/20 e tetos mensais por categoria. Compras no crédito comprometem o orçamento no mês da compra; parcelas entram no mês do vencimento. O pagamento da fatura não é contado novamente.
         </p>
       </div>
 
@@ -290,6 +290,7 @@ onMounted(() => {
         </div>
       </div>
 
+      <p v-if="budget503020" class="context-message">Comprometido no mês: <strong>{{ formatBRL(Number(budget503020.needs_spent) + Number(budget503020.wants_spent) + Number(budget503020.savings_spent) + Number(budget503020.other_spent || 0)) }}</strong><span v-if="Number(budget503020.other_spent || 0) > 0"> · Outros gastos: {{ formatBRL(budget503020.other_spent || 0) }}. Esses gastos aparecem no total, fora das três faixas da regra.</span></p>
       <!-- Realized vs Allocated Comparison Cards -->
       <div
         v-if="budget503020"
@@ -308,7 +309,7 @@ onMounted(() => {
             >
           </div>
           <div class="flex justify-between text-base text-slate-600">
-            <span>Gasto Realizado:</span>
+            <span>Gasto / comprometido:</span>
             <span class="font-bold text-slate-900">{{
               formatBRL(budget503020.needs_spent)
             }}</span>
@@ -342,7 +343,7 @@ onMounted(() => {
             >
           </div>
           <div class="flex justify-between text-base text-slate-600">
-            <span>Gasto Realizado:</span>
+            <span>Gasto / comprometido:</span>
             <span class="font-bold text-slate-900">{{
               formatBRL(budget503020.wants_spent)
             }}</span>
@@ -376,7 +377,7 @@ onMounted(() => {
             >
           </div>
           <div class="flex justify-between text-base text-slate-600">
-            <span>Guardado / Investido:</span>
+            <span>Investido / comprometido:</span>
             <span class="font-bold text-slate-900">{{
               formatBRL(budget503020.savings_spent)
             }}</span>
@@ -480,7 +481,7 @@ onMounted(() => {
 
           <div class="space-y-1 text-base">
             <div class="flex justify-between text-slate-500">
-              <span>Gasto realizado:</span>
+              <span>Gasto / comprometido:</span>
               <span class="font-bold text-slate-800">{{
                 formatBRL(b.realized_spent)
               }}</span>

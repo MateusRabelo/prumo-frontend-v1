@@ -1,0 +1,32 @@
+{
+  "spotify": {
+    "file": "spotify.svg",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/spotify.svg",
+    "origin": "Simple Icons (CC0)"
+  },
+  "netflix": {
+    "file": "netflix.svg",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/netflix.svg",
+    "origin": "Simple Icons (CC0)"
+  },
+  "youtube": {
+    "file": "youtube.svg",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/youtube.svg",
+    "origin": "Simple Icons (CC0)"
+  },
+  "icloud": {
+    "file": "icloud.svg",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/icloud.svg",
+    "origin": "Simple Icons (CC0)"
+  },
+  "brisanet": {
+    "file": "brisanet.png",
+    "url": "https://www.brisanet.com.br/favicon/apple-touch-icon.png",
+    "origin": "Official brand website"
+  },
+  "tim": {
+    "file": "tim.svg",
+    "url": "https://www.tim.com.br/themes/custom/timbrasil/logo.svg",
+    "origin": "Official brand website"
+  }
+}

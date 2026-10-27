@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { CreditCard, Receipt } from 'lucide-vue-next';
+import BankLogo from '@/components/ui/BankLogo.vue';
 import type { Transaction } from '@/types';
 const props = defineProps<{ transaction: Transaction }>();
 const invoiceLink = computed(() => props.transaction.card_id && (props.transaction.is_invoice_payment || props.transaction.payment_mode === 'CREDIT') ? {
@@ -10,7 +10,7 @@ const mode = computed(() => props.transaction.is_invoice_payment ? 'Pagamento de
 </script>
 <template>
   <div v-if="transaction.card_id" class="transaction-card-info">
-    <component :is="transaction.is_invoice_payment ? Receipt : CreditCard" :size="17" aria-hidden="true" />
+    <BankLogo :name="transaction.card_bank_name || transaction.card_name || transaction.account_bank_name" :size="28"/>
     <div><RouterLink v-if="invoiceLink" :to="invoiceLink" class="card-link">{{ transaction.card_name || 'Cartão vinculado' }}<span v-if="transaction.card_last_digits"> · final {{ transaction.card_last_digits }}</span></RouterLink><strong v-else>{{ transaction.card_name || 'Cartão vinculado' }}<span v-if="transaction.card_last_digits"> · final {{ transaction.card_last_digits }}</span></strong><small>{{ mode }}<span v-if="transaction.invoice_label"> · {{ transaction.invoice_label }}</span></small><RouterLink v-if="transaction.recurrence_id" to="/subscriptions" class="card-link">Assinatura / recorrente</RouterLink></div>
   </div>
   <p v-else-if="transaction.type === 'DESPESA'" class="no-card">Pela conta · Sem cartão vinculado</p>

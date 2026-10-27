@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
+import { draftJournal } from '@/composables/importDraftJournal';
 import { apiErrorMessage } from '@/utils/apiError';
 import { api } from '@/services/api';
 import { formatBRL, formatDateBR } from '@/utils/formatters';
@@ -8,12 +11,24 @@ import { FileUp, Check, ArrowRight, Trash2, Lightbulb, AlertCircle } from 'lucid
 import { useFeedback } from '@/composables/useFeedback';
 interface Row {
   entry_kind?: string; index: number; date: string; amount: string; original_description: string; description: string;
+  classification?: string; classification_explicit?: boolean;
   detectedType: boolean; suggestedCategory: string | null; type: 'RECEITA' | 'DESPESA' | ''; category_id: string | null; blocked: boolean; warning: string;
   subscription_info?: { matching_id?: string; category_id?: string; frequency: string; reason: string }; import_subscription?: boolean; subscription_frequency?: string;
   installment_info?: { number: number; count: number; description: string; matching_plan_id?: string }; import_installment?: boolean; duplicate: boolean; possible_installment?: boolean; refunded_in_statement?: boolean; possible_duplicate: boolean; learned: boolean; selected: boolean; remember: boolean;
 }
 interface StatementSummary { format?: string; issuer: string; year: number; month: number; purchases: string | null; previous_balance: string | null; amount_due: string | null; recognized_credits: string; recognized_payments: string; totals_match: boolean | null; requires_reconciliation: boolean }
 interface Rule { id: string; merchant: string; description: string }
+const auth = useAuthStore(), route = useRoute(), router = useRouter();
+const draftOwner = auth.user?.id || '', draftFamily = auth.currentFamilyId || '';
+interface DraftSummary { id:string; file_name:string; revision:number; updated_at:string; expires_at:string; rows_count:number }
+const drafts = ref<DraftSummary[]>([]), draftId = ref(''), draftRevision = ref(1), draftName = ref('');
+const draftStatus = ref(''), draftDirty = ref(false), draftConflict = ref(false), restoringDraft = ref(false);
+const localJournalProtected = ref(false);
+const localRecovery = ref<any>(null), groupOpen = ref<Record<string,boolean>>({});
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+let draftRequest: Promise<boolean> | null = null;
+let lastSavedState = '';
+const draftHeaders = { 'X-Family-Id': draftFamily };
 const accounts = ref<FinancialAccount[]>([]), cards = ref<CreditCard[]>([]), categories = ref<Category[]>([]);
 const rules = ref<Rule[]>([]);
 const source = ref<'bank' | 'card'>('bank');
@@ -35,6 +50,8 @@ watch([cardId, source], () => { const card = cards.value.find(c => c.id === card
 const selected = computed(() => rows.value.filter(row => row.selected && !row.blocked && !row.duplicate));
 const unresolved = computed(() => selected.value.some(row => !row.type || !row.description.trim() || ((row.import_installment && !row.installment_info?.matching_plan_id || row.import_subscription) && !row.category_id)));
 const bulkCategory = ref('');
+const bulkClassification = ref('');
+const classifications = { NECESSIDADE: 'Necessidade', DESEJO: 'Desejo', OUTRO: 'Outro', INVESTIMENTO: 'Investimento / poupança' };
 const bulkScope = ref('installments');
 const bulkRemember = ref(true);
 const bulkMessage = ref('');
@@ -42,7 +59,7 @@ const bulkTargets = computed(() => selected.value.filter(row => {
   if (bulkScope.value === 'installments') return !!row.installment_info && !row.category_id;
   if (bulkScope.value === 'uncategorized') return !row.category_id;
   return true;
-}).filter(row => !bulkCategory.value || availableCategories(row).some(c => c.id === bulkCategory.value)));
+}).filter(row => (!bulkClassification.value || row.type === 'DESPESA') && (!bulkCategory.value || availableCategories(row).some(c => c.id === bulkCategory.value))));
 const categoryGroups = computed(() => {
   const groups = new Map<string, { key: string; name: string; rows: Row[]; total: number }>();
   for (const row of purchases.value) {
@@ -54,9 +71,13 @@ const categoryGroups = computed(() => {
   return [...groups.values()].sort((a,b) => !a.key ? -1 : !b.key ? 1 : a.name.localeCompare(b.name, 'pt-BR'));
 });
 function applyBulkCategory() {
-  if (!bulkCategory.value || saving.value) return;
+  if ((!bulkCategory.value && !bulkClassification.value) || saving.value) return;
   const targets = [...bulkTargets.value];
-  for (const row of targets) { row.category_id = bulkCategory.value; row.remember = bulkRemember.value || row.remember; }
+  for (const row of targets) {
+    if (bulkCategory.value) { row.category_id = bulkCategory.value; if (!row.classification_explicit) row.classification = categories.value.find(c => c.id === bulkCategory.value)?.classification || 'OUTRO'; }
+    if (bulkClassification.value) { row.classification = bulkClassification.value; row.classification_explicit = true; }
+    row.remember = bulkRemember.value || row.remember;
+  }
   reviewed.value = false;
   bulkMessage.value = `${targets.length} lançamentos atualizados. Confira os grupos abaixo antes de salvar.`;
 }
@@ -75,6 +96,8 @@ onMounted(async () => {
     const [a, c, cat] = await Promise.all([api.get('/settings/accounts'), api.get('/cards'), api.get('/settings/categories'), loadRules()]);
     accounts.value = a.data; cards.value = c.data; categories.value = cat.data;
     accountId.value = liquidAccounts.value[0]?.id || ''; cardId.value = creditCards.value[0]?.id || '';
+    await loadDrafts();
+    if (typeof route.query.draft === 'string') await resumeDraft(route.query.draft);
   } catch { error.value = 'Não foi possível carregar as contas e regras. Atualize a página para tentar novamente.'; }
   finally { initializing.value = false; }
 });
@@ -94,18 +117,141 @@ async function preview() {
   loading.value = true;
   try {
     const res = await api.post('/imports/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-    rows.value = res.data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.refunded_in_statement, import_installment: source.value === 'card' && !!row.installment_info, import_subscription: !!row.subscription_info?.matching_id, subscription_frequency: row.subscription_info?.frequency || 'MONTHLY', category_id: row.category_id || row.subscription_info?.category_id || null, remember: false }));
-    for (const row of rows.value) {
-      if (row.category_id && !availableCategories(row).some(c => c.id === row.category_id)) row.category_id = null;
+    applyPreview(res.data);
+    if (res.data.draft_id) {
+      draftId.value = res.data.draft_id; draftRevision.value = res.data.revision; draftName.value = res.data.file_name;
+      await router.replace({ query: { ...route.query, draft: draftId.value } });
+      queueDraftSave();
     }
-    if (res.data.resolved_card_id) cardId.value = res.data.resolved_card_id;
-    if (res.data.resolved_account_id) accountId.value = res.data.resolved_account_id;
-    bulkMessage.value = ''; bulkCategory.value = ''; bulkScope.value = rows.value.some(r => r.installment_info && !r.category_id) ? 'installments' : 'uncategorized';
-    statement.value = res.data.statement || null; reconciliationReviewed.value = false;
-    warnings.value = res.data.warnings; token.value = res.data.preview_token; reviewed.value = false;
+
   } catch (err: any) { error.value = apiErrorMessage(err, 'Não foi possível ler o arquivo. Tente exportar novamente pelo banco.'); }
   finally { loading.value = false; }
 }
+function applyPreview(data: any) {
+  restoringDraft.value = true;
+    rows.value = data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.refunded_in_statement, import_installment: source.value === 'card' && !!row.installment_info, import_subscription: !!row.subscription_info?.matching_id, subscription_frequency: row.subscription_info?.frequency || 'MONTHLY', category_id: row.category_id || row.subscription_info?.category_id || null, remember: false }));
+    for (const row of rows.value) {
+      if (row.category_id && !availableCategories(row).some(c => c.id === row.category_id)) row.category_id = null;
+      if (!row.classification_explicit) row.classification = categories.value.find(c => c.id === row.category_id)?.classification || row.classification || 'OUTRO';
+    }
+    if (data.resolved_card_id) cardId.value = data.resolved_card_id;
+    if (data.resolved_account_id) accountId.value = data.resolved_account_id;
+    bulkMessage.value = ''; bulkCategory.value = ''; bulkClassification.value = ''; bulkScope.value = rows.value.some(r => r.installment_info && !r.category_id) ? 'installments' : 'uncategorized';
+    statement.value = data.statement || null; reconciliationReviewed.value = false;
+    warnings.value = data.warnings; token.value = data.preview_token; reviewed.value = false;
+  reviewed.value = false; reconciliationReviewed.value = false;
+  restoringDraft.value = false;
+}
+function draftState() { return {
+  entries: rows.value.map(row => ({ index: row.index, description: row.description, type: row.type || '', category_id: row.category_id || null, selected: !!row.selected, classification: row.classification || 'OUTRO', classification_explicit: !!row.classification_explicit, remember: !!row.remember, import_installment: !!row.import_installment, import_subscription: !!row.import_subscription, subscription_frequency: row.subscription_frequency || 'MONTHLY' })),
+  bulk_category: bulkCategory.value || null, bulk_classification: bulkClassification.value, bulk_scope: bulkScope.value, bulk_remember: bulkRemember.value, group_open: groupOpen.value,
+}; }
+function applyReview(state: any) {
+  restoringDraft.value = true;
+  for (const edit of Array.isArray(state.entries) ? state.entries : []) {
+    const row = rows.value.find(r => r.index === edit.index);
+    if (!row || typeof edit.description !== 'string') continue;
+    row.description = edit.description; row.type = row.detectedType ? row.type : edit.type;
+    row.category_id = availableCategories(row).some(c => c.id === edit.category_id) ? edit.category_id : null;
+    row.classification = Object.hasOwn(classifications, edit.classification) ? edit.classification : row.classification || 'OUTRO'; row.classification_explicit = !!edit.classification_explicit;
+    row.selected = !!edit.selected; row.remember = !!edit.remember;
+    row.import_installment = !!row.installment_info && !!edit.import_installment;
+    row.import_subscription = !!edit.import_subscription; row.subscription_frequency = edit.subscription_frequency || 'MONTHLY';
+  }
+  bulkCategory.value = categories.value.some(c => c.id === state.bulk_category) ? state.bulk_category : ''; bulkClassification.value = state.bulk_classification || ''; bulkScope.value = state.bulk_scope || 'uncategorized'; bulkRemember.value = state.bulk_remember !== false;
+  groupOpen.value = state.group_open || {}; reviewed.value = false; reconciliationReviewed.value = false;
+  restoringDraft.value = false;
+}
+async function loadDrafts() {
+  try { const res = await api.get('/imports/drafts', { headers: draftHeaders }); drafts.value = Array.isArray(res.data) ? res.data : []; }
+  catch { draftStatus.value = 'Não foi possível consultar seus rascunhos agora.'; }
+}
+async function resumeDraft(id: string) {
+  if (loading.value || saving.value) return;
+  loading.value = true; error.value = ''; localRecovery.value = null; draftConflict.value = false;
+  try {
+    const { data } = await api.get(`/imports/drafts/${id}`, { headers: draftHeaders });
+    restoringDraft.value = true;
+    draftId.value = ''; source.value = data.resolved_card_id ? 'card' : 'bank';
+    referenceMonth.value = data.reference_month || referenceMonth.value;
+    applyPreview(data); applyReview(data.review_state || {});
+    draftId.value = id; draftRevision.value = data.revision; draftName.value = data.file_name;
+    lastSavedState = JSON.stringify(draftState()); draftDirty.value = false;
+    const journal = draftJournal(draftOwner, draftFamily, id).read();
+    if (journal?.state) {
+      if (journal.revision === data.revision) { applyReview(journal.state); queueDraftSave(); }
+      else if (JSON.stringify(journal.state) !== lastSavedState) localRecovery.value = journal.state;
+      else { draftJournal(draftOwner, draftFamily, id).remove(); localJournalProtected.value = false; }
+    }
+    draftStatus.value = localRecovery.value ? 'Há alterações locais e uma versão mais recente na nuvem. Confira antes de substituir.' : 'Rascunho retomado. Confira a revisão antes de importar.';
+    await router.replace({ query: { ...route.query, draft: id } });
+  } catch (err) { error.value = apiErrorMessage(err, 'Não foi possível retomar o rascunho.'); }
+  finally { restoringDraft.value = false; loading.value = false; }
+}
+function queueDraftSave() {
+  if (!draftId.value || restoringDraft.value) return;
+  const state = draftState();
+  if (JSON.stringify(state) === lastSavedState) return;
+  draftDirty.value = true;
+  const written = draftJournal(draftOwner, draftFamily, draftId.value).write({ revision: draftRevision.value, state });
+  localJournalProtected.value = written;
+  draftStatus.value = written ? 'Alterações protegidas neste dispositivo. Sincronizando…' : 'Sincronizando rascunho…';
+  if (draftTimer) clearTimeout(draftTimer);
+  if (!draftConflict.value) draftTimer = setTimeout(() => { void flushDraft(); }, 700);
+}
+async function flushDraft(): Promise<boolean> {
+  if (draftRequest) { await draftRequest; return draftDirty.value ? flushDraft() : true; }
+  if (!draftId.value || !draftDirty.value) return true;
+  if (draftConflict.value || auth.user?.id !== draftOwner || !auth.token) return false;
+  if (draftTimer) clearTimeout(draftTimer);
+  const id = draftId.value, snapshot = draftState(), serialized = JSON.stringify(snapshot);
+  draftStatus.value = 'Salvando rascunho…';
+  draftRequest = (async () => {
+    try {
+      const res = await api.put(`/imports/drafts/${id}`, { revision: draftRevision.value, ...snapshot }, { headers: draftHeaders });
+      if (draftId.value !== id) return true;
+      draftRevision.value = res.data.revision; token.value = res.data.preview_token;
+      lastSavedState = serialized; draftDirty.value = JSON.stringify(draftState()) !== serialized;
+      if (draftDirty.value) draftJournal(draftOwner, draftFamily, id).write({ revision: draftRevision.value, state: draftState() });
+      else { draftJournal(draftOwner, draftFamily, id).remove(); localJournalProtected.value = false; }
+      draftStatus.value = draftDirty.value ? 'Há novas alterações para sincronizar.' : 'Rascunho salvo na nuvem.';
+      return true;
+    } catch (err: any) {
+      if (err.response?.status === 409) draftConflict.value = true;
+      draftStatus.value = apiErrorMessage(err, localJournalProtected.value ? 'Sem sincronização agora. Suas alterações permanecem neste dispositivo para retomar.' : 'Não foi possível salvar. Mantenha esta tela aberta e tente novamente.');
+      return false;
+    } finally { draftRequest = null; }
+  })();
+  const result = await draftRequest;
+  if (result && draftDirty.value) return flushDraft();
+  return result;
+}
+async function renewDraftToken() {
+  if (!draftId.value) return;
+  const res = await api.get(`/imports/drafts/${draftId.value}`, { headers: draftHeaders });
+  if (res.data.revision !== draftRevision.value) { draftConflict.value = true; throw new Error('O rascunho mudou em outra aba. Reabra-o antes de importar.'); }
+  token.value = res.data.preview_token;
+}
+async function saveAndLeave() {
+  if (!await flushDraft()) return;
+  reset(); await router.replace({ query: {} }); await loadDrafts();
+}
+async function leavePreview() {
+  const synced = await flushDraft(); if (!synced && !localJournalProtected.value) return; reset(); await router.replace({ query: {} }); await loadDrafts();
+}
+async function discardDraft(id: string) {
+  if (!await feedback.confirm('Descartar este rascunho? Nenhum lançamento financeiro será removido.')) return;
+  try { await api.delete(`/imports/drafts/${id}`, { headers: draftHeaders }); draftJournal(draftOwner, draftFamily, id).remove(); await loadDrafts(); }
+  catch (err) { error.value = apiErrorMessage(err, 'Não foi possível descartar o rascunho.'); }
+}
+function recoverLocal() { const state = localRecovery.value; localRecovery.value = null; if (state) { applyReview(state); queueDraftSave(); } }
+watch([rows, bulkCategory, bulkClassification, bulkScope, bulkRemember, groupOpen], queueDraftSave, { deep: true, flush: 'sync' });
+function protectOnUnload(event: BeforeUnloadEvent) {
+  if (draftDirty.value) { void flushDraft(); if (!localJournalProtected.value) { event.preventDefault(); event.returnValue = ''; } }
+}
+onMounted(() => window.addEventListener('beforeunload', protectOnUnload));
+onBeforeRouteLeave(() => { if (draftDirty.value && !localJournalProtected.value) return flushDraft(); void flushDraft(); return true; });
+onUnmounted(() => { if (draftTimer) clearTimeout(draftTimer); window.removeEventListener('beforeunload', protectOnUnload); void flushDraft(); });
 function rename(row: Row) {
   row.remember = merchantBase(row.description) !== merchantBase(row.original_description);
   if (row.installment_info) {
@@ -118,7 +264,8 @@ function rename(row: Row) {
   }
   reviewed.value = false;
 }
-function reset() { statement.value = null; reconciliationReviewed.value = false; token.value = ''; rows.value = []; reviewed.value = false; error.value = ''; }
+function reset() { file.value = null; draftId.value = ''; draftDirty.value = false; draftStatus.value = ''; groupOpen.value = {}; statement.value = null; reconciliationReviewed.value = false; token.value = ''; rows.value = []; reviewed.value = false; error.value = ''; }
+function changeCategory(row: Row) { row.remember = true; if (!row.classification_explicit) row.classification = categories.value.find(c => c.id === row.category_id)?.classification || 'OUTRO'; reviewed.value = false; }
 function changeType(row: Row) {
   row.category_id = availableCategories(row).some(c => c.id === row.suggestedCategory) ? row.suggestedCategory : null;
   reviewed.value = false;
@@ -127,10 +274,14 @@ async function confirmImport() {
   if (saving.value || !reviewed.value || !selected.value.length || unresolved.value || statement.value?.totals_match === false || (statement.value?.requires_reconciliation && !reconciliationReviewed.value)) return;
   saving.value = true; error.value = '';
   try {
-    const res = await api.post('/imports/confirm', { preview_token: token.value, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, remember: row.remember, import_installment: !!row.import_installment, import_subscription: !!row.import_subscription, subscription_frequency: row.subscription_frequency || 'MONTHLY' })) });
-    result.value = res.data; reset(); file.value = null; if (fileInput.value) fileInput.value.value = '';
+    if (!await flushDraft()) { error.value = 'Sincronize ou reabra o rascunho antes de concluir a importação.'; return; }
+    await renewDraftToken();
+    const completedId = draftId.value;
+    const res = await api.post('/imports/confirm', { ...(draftId.value ? { draft_id: draftId.value, draft_revision: draftRevision.value } : {}), preview_token: token.value, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, classification: row.classification || 'OUTRO', classification_explicit: !!row.classification_explicit, remember: row.remember, import_installment: !!row.import_installment, import_subscription: !!row.import_subscription, subscription_frequency: row.subscription_frequency || 'MONTHLY' })) });
+    if (completedId) draftJournal(draftOwner, draftFamily, completedId).remove();
+    result.value = res.data; reset(); await router.replace({ query: {} }); await loadDrafts(); file.value = null; if (fileInput.value) fileInput.value.value = '';
     await loadRules().catch(() => feedback.notify('Lançamentos salvos. Não foi possível atualizar a lista de regras agora.'));
-  } catch (err: any) { error.value = apiErrorMessage(err, 'Não foi possível salvar a importação. Confira os lançamentos antes de tentar novamente.'); }
+  } catch (err: any) { error.value = apiErrorMessage(err, draftConflict.value ? 'O rascunho mudou em outra aba. Reabra-o antes de importar.' : 'Não foi possível salvar a importação. Confira os lançamentos antes de tentar novamente.'); }
   finally { saving.value = false; }
 }
 async function removeRule(rule: Rule) {
@@ -146,6 +297,7 @@ async function removeRule(rule: Rule) {
     <p v-if="initializing" role="status">Carregando suas contas…</p>
     <div v-if="error" class="form-error" role="alert">{{ error }}</div>
     <section v-if="result" class="import-success" role="status"><Check :size="24" /><div><h2>{{ result.imported }} lançamentos importados</h2><p v-if="result.skipped">{{ result.skipped }} duplicados ignorados.</p><p>Confira em <RouterLink to="/transactions">Lançamentos</RouterLink> ou em <RouterLink to="/invoices">Faturas</RouterLink>.</p></div></section>
+    <section v-if="!initializing && !token && drafts.length" class="import-source" aria-label="Rascunhos de importação"><h2>Continue de onde parou</h2><p>Rascunhos privados deste espaço, disponíveis por 30 dias. Nenhum lançamento é criado até você concluir a revisão.</p><div v-for="draft in drafts" :key="draft.id" class="import-rule"><span><strong>{{ draft.file_name }}</strong> · {{ draft.rows_count }} linhas</span><div class="flex gap-2"><button type="button" class="ui-button" :disabled="loading" @click="resumeDraft(draft.id)">Retomar</button><button type="button" class="icon-button" :aria-label="`Descartar rascunho ${draft.file_name}`" @click="discardDraft(draft.id)"><Trash2 :size="18"/></button></div></div></section>
     <form v-if="!initializing && !token" class="import-source" @submit.prevent="preview">
       <h2>1. De onde vem o arquivo?</h2>
       <div class="import-fields">
@@ -164,7 +316,8 @@ async function removeRule(rule: Rule) {
       <p class="field-help">O arquivo é processado no servidor do Prumo, sem envio para provedores de IA. O arquivo original não é mantido após o processamento. A prévia expira em 30 minutos.</p>
     </form>
     <section v-if="token" class="import-review" aria-labelledby="import-review-title">
-      <div class="import-review-heading"><div><h2 id="import-review-title">2. Confira antes de salvar</h2><p>{{ source === 'card' ? creditCards.find(c => c.id === cardId)?.name : liquidAccounts.find(a => a.id === accountId)?.name }} · {{ rows.length }} linhas reconhecidas. Nenhum lançamento foi salvo ainda.</p></div><button type="button" class="ui-button" :disabled="saving" @click="reset">Escolher outro arquivo</button></div>
+      <div class="import-review-heading"><div><h2 id="import-review-title">2. Confira antes de salvar</h2><p>{{ source === 'card' ? creditCards.find(c => c.id === cardId)?.name : liquidAccounts.find(a => a.id === accountId)?.name }} · {{ rows.length }} linhas reconhecidas. Nenhum lançamento foi salvo ainda.</p></div><button type="button" class="ui-button" :disabled="saving" @click="leavePreview">Escolher outro arquivo</button></div>
+      <section v-if="draftId" class="import-statement-summary" aria-label="Rascunho da revisão"><h3>{{ draftName }}</h3><p class="field-help">A revisão fica disponível por 30 dias. O arquivo original não é armazenado.</p><p role="status">{{ draftStatus || 'Rascunho criado. As alterações são salvas automaticamente.' }}</p><div class="flex flex-wrap gap-3"><button type="button" class="ui-button" :disabled="saving || loading" @click="flushDraft">Salvar rascunho</button><button type="button" class="ui-button" :disabled="saving || loading" @click="saveAndLeave">Salvar rascunho e sair</button><button v-if="draftConflict" type="button" class="ui-button" @click="resumeDraft(draftId)">Reabrir rascunho</button><button v-if="localRecovery" type="button" class="ui-button" @click="recoverLocal">Usar minhas alterações locais</button></div></section>
       <section v-if="statement" class="import-statement-summary" :aria-label="statement.format === 'ofx' ? 'Resumo reconhecido do OFX' : 'Resumo reconhecido do PDF'">
         <h3>{{ statement.issuer }} · Fatura {{ String(statement.month).padStart(2, '0') }}/{{ statement.year }}</h3>
         <dl><div><dt>Saldo da fatura anterior</dt><dd>{{ statement.previous_balance === null ? 'Não informado' : formatBRL(Number(statement.previous_balance)) }}</dd></div><div><dt>Compras no PDF</dt><dd>{{ formatBRL(Number(statement.purchases)) }}</dd></div><div><dt>Pagamentos recebidos</dt><dd>{{ formatBRL(Number(statement.recognized_payments)) }}</dd></div><div><dt>Estornos e créditos</dt><dd>{{ formatBRL(Number(statement.recognized_credits)) }}</dd></div><div><dt>Total a pagar informado pelo banco</dt><dd>{{ statement.amount_due === null ? 'Não informado' : formatBRL(Number(statement.amount_due)) }}</dd></div></dl>
@@ -174,15 +327,16 @@ async function removeRule(rule: Rule) {
       </section>
       <div class="import-caution"><AlertCircle :size="22" /><p>Compare com o arquivo original: saldos, totais e linhas não reconhecidas ficam fora da importação. Confira especialmente datas, parcelas e pagamentos de fatura. Possíveis duplicados vêm desmarcados; duplicados de importações anteriores não serão salvos novamente.</p></div>
       <details v-if="warnings.length"><summary>{{ warnings.length }} avisos de leitura — confira no arquivo original</summary><ul><li v-for="warning in warnings" :key="warning">{{ warning }}</li></ul></details>
-      <section class="import-source" aria-label="Categorias em lote"><h3>Organize várias compras de uma vez</h3><div class="import-fields"><div><label for="bulk-scope">Aplicar em</label><select id="bulk-scope" v-model="bulkScope" :disabled="saving"><option value="installments">Parcelas selecionadas sem categoria</option><option value="uncategorized">Todos os selecionados sem categoria</option><option value="selected">Todos os selecionados (substituir categoria)</option></select></div><div><label for="bulk-category">Categoria em lote</label><select id="bulk-category" v-model="bulkCategory" :disabled="saving"><option value="" disabled>Escolha uma categoria</option><option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }} · {{ c.type === 'RECEITA' ? 'Receitas' : c.type === 'DESPESA' ? 'Despesas' : 'Receitas e despesas' }}</option></select></div></div><label class="import-check"><input v-model="bulkRemember" type="checkbox" :disabled="saving"/><span>Lembrar estas categorias para os mesmos estabelecimentos nas próximas importações.</span></label><p class="field-help">Somente lançamentos selecionados, permitidos e compatíveis com o tipo da categoria serão alterados. As categorias atuais são preservadas nas opções “sem categoria”.</p><button type="button" class="ui-button primary" :disabled="saving || !bulkCategory || !bulkTargets.length" @click="applyBulkCategory">Aplicar a {{ bulkTargets.length }} lançamentos</button><p v-if="bulkMessage" role="status">{{ bulkMessage }}</p></section>
-      <details v-for="group in categoryGroups" :key="group.key" class="import-category-group" open><summary class="import-category-heading"><h3>{{ group.name }}</h3><p>{{ group.rows.length }} lançamentos · selecionados: {{ formatBRL(group.total) }}</p></summary>
+      <section class="import-source" aria-label="Categorias em lote"><h3>Organize várias compras de uma vez</h3><div class="import-fields"><div><label for="bulk-scope">Aplicar em</label><select id="bulk-scope" v-model="bulkScope" :disabled="saving"><option value="installments">Parcelas selecionadas sem categoria</option><option value="uncategorized">Todos os selecionados sem categoria</option><option value="selected">Todos os selecionados (substituir categoria)</option></select></div><div><label for="bulk-category">Categoria em lote</label><select id="bulk-category" v-model="bulkCategory" :disabled="saving"><option value="" disabled>Escolha uma categoria</option><option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }} · {{ c.type === 'RECEITA' ? 'Receitas' : c.type === 'DESPESA' ? 'Despesas' : 'Receitas e despesas' }}</option></select></div><div><label for="bulk-classification">Classificação em lote</label><select id="bulk-classification" v-model="bulkClassification" :disabled="saving"><option value="">Manter classificação atual</option><option v-for="(name,value) in classifications" :key="value" :value="value">{{ name }}</option></select></div></div><label class="import-check"><input v-model="bulkRemember" type="checkbox" :disabled="saving"/><span>Lembrar categorias e classificações para os mesmos estabelecimentos nas próximas importações.</span></label><p class="field-help">Somente lançamentos selecionados, permitidos e compatíveis com o tipo da categoria serão alterados. As categorias atuais são preservadas nas opções “sem categoria”.</p><button type="button" class="ui-button primary" :disabled="saving || (!bulkCategory && !bulkClassification) || !bulkTargets.length" @click="applyBulkCategory">Aplicar a {{ bulkTargets.length }} lançamentos</button><p v-if="bulkMessage" role="status">{{ bulkMessage }}</p></section>
+      <details v-for="group in categoryGroups" :key="group.key" class="import-category-group" :open="groupOpen[group.key] !== false" @toggle="groupOpen[group.key] = ($event.target as HTMLDetailsElement).open"><summary class="import-category-heading"><h3>{{ group.name }}</h3><p>{{ group.rows.length }} lançamentos · selecionados: {{ formatBRL(group.total) }}</p></summary>
       <article v-for="row in group.rows" :key="row.index" class="import-row" :class="{ excluded: !row.selected || row.blocked || row.duplicate }">
-        <div class="import-row-top"><label class="import-check"><input v-model="row.selected" type="checkbox" :disabled="row.blocked || row.duplicate || saving" @change="reviewed = false" /><span>{{ formatDateBR(row.date) }}</span></label><strong>{{ formatBRL(Number(row.amount)) }}</strong><span v-if="row.duplicate">Já importado</span><span v-else-if="row.possible_duplicate">Possível duplicado</span><span v-else-if="row.learned" class="import-learned"><Lightbulb :size="16" />Nome reconhecido</span></div>
+        <div class="import-row-top"><label class="import-check"><input v-model="row.selected" type="checkbox" :disabled="row.blocked || row.duplicate || saving" @change="reviewed = false" /><span>{{ formatDateBR(row.date) }}</span></label><strong>{{ formatBRL(Number(row.amount)) }}</strong><span v-if="row.detectedType">{{ row.type === 'RECEITA' ? 'Receita' : 'Despesa' }}</span><span v-if="row.duplicate">Já importado</span><span v-else-if="row.possible_duplicate">Possível duplicado</span><span v-else-if="row.learned" class="import-learned"><Lightbulb :size="16" />Nome reconhecido</span></div>
         <p class="import-original">No extrato: {{ row.original_description }}</p>
         <div class="import-fields">
           <div><label :for="`import-name-${row.index}`">Nome no Prumo</label><input :id="`import-name-${row.index}`" v-model="row.description" maxlength="255" :disabled="row.blocked || row.duplicate || saving" @input="rename(row)" /></div>
-          <div><label :for="`import-type-${row.index}`">Entrada ou saída</label><select :id="`import-type-${row.index}`" v-model="row.type" :disabled="row.blocked || row.duplicate || saving || row.detectedType" @change="changeType(row)"><option value="" disabled>Defina o tipo</option><option value="DESPESA">Saída / despesa</option><option value="RECEITA">Entrada / receita</option></select></div>
-          <div><label :for="`import-category-${row.index}`">Categoria</label><select :id="`import-category-${row.index}`" v-model="row.category_id" :disabled="row.blocked || row.duplicate || saving" @change="row.remember = true; reviewed = false"><option :value="null">Sem categoria</option><option v-for="category in availableCategories(row)" :key="category.id" :value="category.id">{{ category.name }}</option></select></div>
+          <div v-if="!row.detectedType"><label :for="`import-type-${row.index}`">Entrada ou saída</label><select :id="`import-type-${row.index}`" v-model="row.type" :disabled="row.blocked || row.duplicate || saving || row.detectedType" @change="changeType(row)"><option value="" disabled>Defina o tipo</option><option value="DESPESA">Saída / despesa</option><option value="RECEITA">Entrada / receita</option></select></div>
+          <div><label :for="`import-category-${row.index}`">Categoria</label><select :id="`import-category-${row.index}`" v-model="row.category_id" :disabled="row.blocked || row.duplicate || saving" @change="changeCategory(row)"><option :value="null">Sem categoria</option><option v-for="category in availableCategories(row)" :key="category.id" :value="category.id">{{ category.name }}</option></select></div>
+          <div v-if="row.type === 'DESPESA'"><label :for="`import-classification-${row.index}`">Classificação</label><select :id="`import-classification-${row.index}`" v-model="row.classification" :disabled="row.blocked || row.duplicate || saving" @change="row.classification_explicit = true; row.remember = true; reviewed = false"><option v-for="(name,value) in classifications" :key="value" :value="value">{{ name }}</option></select></div>
         </div>
         <label v-if="row.installment_info && source === 'card' && !row.duplicate" class="import-check"><input v-model="row.import_installment" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.installment_info.matching_plan_id ? 'Atualizar o parcelamento existente' : 'Criar acompanhamento deste parcelamento' }} · parcela {{ row.installment_info.number }}/{{ row.installment_info.count }}. Somente esta parcela e as futuras serão acompanhadas; valores futuros são estimados pelo valor desta parcela. Escolha uma categoria para criar o plano.</span></label>
         <div v-if="row.subscription_info && !row.blocked && !row.duplicate" class="import-statement-summary"><p>{{ row.subscription_info.reason }}</p><label class="import-check"><input v-model="row.import_subscription" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.subscription_info.matching_id ? 'Vincular esta cobrança à assinatura existente e atualizar o próximo ciclo' : 'Acompanhar esta compra como assinatura' }}. A cobrança será lançada uma vez; ciclos futuros ficam previstos em Assinaturas.</span></label><div v-if="row.import_subscription"><label :for="`subscription-frequency-${row.index}`">Frequência confirmada</label><select :id="`subscription-frequency-${row.index}`" v-model="row.subscription_frequency" class="w-full border rounded-lg p-3" @change="reviewed = false"><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual</option><option value="WEEKLY">Semanal</option></select></div></div>

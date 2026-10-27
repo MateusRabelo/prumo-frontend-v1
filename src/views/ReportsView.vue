@@ -426,11 +426,11 @@ onMounted(() => {
                 >
                   <span class="font-semibold text-gray-700">
                     {{
-                      c.classification === "ESSENCIAL"
+                      ["NECESSIDADE", "ESSENCIAL"].includes(c.classification)
                         ? "Gastos Essenciais (50%)"
-                        : c.classification === "NAO_ESSENCIAL"
+                        : ["DESEJO", "NAO_ESSENCIAL"].includes(c.classification)
                           ? "Estilo de Vida (30%)"
-                          : "Investimentos & Metas (20%)"
+                          : c.classification === "INVESTIMENTO" ? "Investimentos & Metas (20%)" : "Outros"
                     }}
                   </span>
                   <div class="flex items-center gap-2">
@@ -448,9 +448,9 @@ onMounted(() => {
                   <div
                     class="h-2 rounded-full"
                     :class="[
-                      c.classification === 'ESSENCIAL'
+                      ['NECESSIDADE','ESSENCIAL'].includes(c.classification)
                         ? 'bg-blue-600'
-                        : c.classification === 'NAO_ESSENCIAL'
+                        : ['DESEJO','NAO_ESSENCIAL'].includes(c.classification)
                           ? 'bg-purple-600'
                           : 'bg-emerald-600',
                     ]"

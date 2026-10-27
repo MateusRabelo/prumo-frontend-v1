@@ -47,7 +47,7 @@ const categoryForm = ref({
   name: "",
   color: "#10B981",
   icon: "tag",
-  classification: "NECESSIDADE" as "NECESSIDADE" | "DESEJO" | "INVESTIMENTO",
+  classification: "NECESSIDADE" as "NECESSIDADE" | "DESEJO" | "INVESTIMENTO" | "OUTRO",
   type: "DESPESA" as "DESPESA" | "RECEITA" | "AMBOS",
   order_index: 0,
 });
@@ -337,7 +337,7 @@ onMounted(() => {
                         ? "Necessidade (50%)"
                         : cat.classification === "DESEJO"
                           ? "Desejo (30%)"
-                          : "Investimento (20%)"
+                          : cat.classification === "INVESTIMENTO" ? "Investimento (20%)" : "Outro"
                     }}
                   </span>
                 </td>
@@ -514,7 +514,7 @@ onMounted(() => {
             >
               <option value="NECESSIDADE">Gastos Essenciais (50%)</option>
               <option value="DESEJO">Estilo de Vida / Desejos (30%)</option>
-              <option value="INVESTIMENTO">Metas / Investimentos (20%)</option>
+              <option value="OUTRO">Outro</option><option value="INVESTIMENTO">Metas / Investimentos (20%)</option>
             </select>
           </div>
         </div>

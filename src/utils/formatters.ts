@@ -49,6 +49,7 @@ export function formatEnum(value: string | null | undefined): string {
     NECESSIDADE: "Necessidades",
     DESEJO: "Desejos",
     INVESTIMENTO: "Investimentos",
+    OUTRO: "Outros",
     REALIZADA: "Realizada",
     PENDENTE: "Pendente",
     VENCIDA: "Vencida",
