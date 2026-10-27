@@ -8,8 +8,9 @@ import { useFeedback } from '@/composables/useFeedback';
 interface Row {
   index: number; date: string; amount: string; original_description: string; description: string;
   detectedType: boolean; suggestedCategory: string | null; type: 'RECEITA' | 'DESPESA' | ''; category_id: string | null; blocked: boolean; warning: string;
-  duplicate: boolean; possible_installment?: boolean; possible_duplicate: boolean; learned: boolean; selected: boolean; remember: boolean;
+  duplicate: boolean; possible_installment?: boolean; refunded_in_statement?: boolean; possible_duplicate: boolean; learned: boolean; selected: boolean; remember: boolean;
 }
+interface StatementSummary { issuer: string; year: number; month: number; purchases: string | null; previous_balance: string | null; amount_due: string | null; recognized_credits: string; recognized_payments: string; totals_match: boolean | null; requires_reconciliation: boolean }
 interface Rule { id: string; merchant: string; description: string }
 const accounts = ref<FinancialAccount[]>([]), cards = ref<CreditCard[]>([]), categories = ref<Category[]>([]);
 const rules = ref<Rule[]>([]);
@@ -19,6 +20,8 @@ const now = new Date();
 const referenceMonth = ref(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
 const file = ref<File | null>(null), fileInput = ref<HTMLInputElement | null>(null);
 const rows = ref<Row[]>([]), warnings = ref<string[]>([]), token = ref('');
+const statement = ref<StatementSummary | null>(null);
+const reconciliationReviewed = ref(false);
 const loading = ref(false), saving = ref(false), initializing = ref(true), reviewed = ref(false);
 const error = ref(''), result = ref<{ imported: number; skipped: number } | null>(null);
 const feedback = useFeedback();
@@ -58,25 +61,26 @@ async function preview() {
   loading.value = true;
   try {
     const res = await api.post('/imports/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-    rows.value = res.data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.possible_installment, remember: false }));
+    rows.value = res.data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.possible_installment && !row.refunded_in_statement, remember: false }));
     for (const row of rows.value) {
       if (row.category_id && !availableCategories(row).some(c => c.id === row.category_id)) row.category_id = null;
     }
+    statement.value = res.data.statement || null; reconciliationReviewed.value = false;
     warnings.value = res.data.warnings; token.value = res.data.preview_token; reviewed.value = false;
   } catch (err: any) { error.value = typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Não foi possível ler o arquivo. Tente exportar novamente pelo banco.'; }
   finally { loading.value = false; }
 }
 function rename(row: Row) { row.remember = row.description.trim() !== row.original_description; reviewed.value = false; }
-function reset() { token.value = ''; rows.value = []; reviewed.value = false; error.value = ''; }
+function reset() { statement.value = null; reconciliationReviewed.value = false; token.value = ''; rows.value = []; reviewed.value = false; error.value = ''; }
 function changeType(row: Row) {
   row.category_id = availableCategories(row).some(c => c.id === row.suggestedCategory) ? row.suggestedCategory : null;
   reviewed.value = false;
 }
 async function confirmImport() {
-  if (saving.value || !reviewed.value || !selected.value.length || unresolved.value) return;
+  if (saving.value || !reviewed.value || !selected.value.length || unresolved.value || statement.value?.totals_match === false || (statement.value?.requires_reconciliation && !reconciliationReviewed.value)) return;
   saving.value = true; error.value = '';
   try {
-    const res = await api.post('/imports/confirm', { preview_token: token.value, reviewed: true, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, remember: row.remember })) });
+    const res = await api.post('/imports/confirm', { preview_token: token.value, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, remember: row.remember })) });
     result.value = res.data; reset(); file.value = null; if (fileInput.value) fileInput.value.value = '';
     await loadRules().catch(() => feedback.notify('Lançamentos salvos. Não foi possível atualizar a lista de regras agora.'));
   } catch (err: any) { error.value = typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Não foi possível salvar a importação. Confira os lançamentos antes de tentar novamente.'; }
@@ -114,6 +118,13 @@ async function removeRule(rule: Rule) {
     </form>
     <section v-if="token" class="import-review" aria-labelledby="import-review-title">
       <div class="import-review-heading"><div><h2 id="import-review-title">2. Confira antes de salvar</h2><p>{{ source === 'card' ? creditCards.find(c => c.id === cardId)?.name : liquidAccounts.find(a => a.id === accountId)?.name }} · {{ rows.length }} linhas reconhecidas. Nenhum lançamento foi salvo ainda.</p></div><button type="button" class="ui-button" :disabled="saving" @click="reset">Escolher outro arquivo</button></div>
+      <section v-if="statement" class="import-statement-summary" aria-label="Resumo reconhecido do PDF">
+        <h3>{{ statement.issuer }} · Fatura {{ String(statement.month).padStart(2, '0') }}/{{ statement.year }}</h3>
+        <dl><div><dt>Saldo da fatura anterior</dt><dd>{{ statement.previous_balance === null ? 'Não informado' : formatBRL(Number(statement.previous_balance)) }}</dd></div><div><dt>Compras no PDF</dt><dd>{{ formatBRL(Number(statement.purchases)) }}</dd></div><div><dt>Pagamentos recebidos</dt><dd>{{ formatBRL(Number(statement.recognized_payments)) }}</dd></div><div><dt>Estornos e créditos</dt><dd>{{ formatBRL(Number(statement.recognized_credits)) }}</dd></div><div><dt>Total a pagar informado pelo banco</dt><dd>{{ statement.amount_due === null ? 'Não informado' : formatBRL(Number(statement.amount_due)) }}</dd></div></dl>
+        <p v-if="statement.totals_match === true">As somas das compras, créditos e pagamentos reconhecidos conferem com o resumo do PDF.</p>
+        <p v-else class="import-warning">As somas não puderam ser conferidas com o resumo. Não confirme uma importação incompleta.</p>
+        <p>O total de compras não é o valor ainda devido. Pagamentos, créditos e saldo anterior explicam a diferença. As compras selecionadas serão vinculadas ao mês de fatura reconhecido no PDF.</p>
+      </section>
       <div class="import-caution"><AlertCircle :size="22" /><p>Compare com o arquivo original: saldos, totais e linhas não reconhecidas ficam fora da importação. Confira especialmente datas, parcelas e pagamentos de fatura. Possíveis duplicados vêm desmarcados; duplicados de importações anteriores não serão salvos novamente.</p></div>
       <details v-if="warnings.length"><summary>{{ warnings.length }} avisos de leitura — confira no arquivo original</summary><ul><li v-for="warning in warnings" :key="warning">{{ warning }}</li></ul></details>
       <article v-for="row in rows" :key="row.index" class="import-row" :class="{ excluded: !row.selected || row.blocked || row.duplicate }">
@@ -127,7 +138,7 @@ async function removeRule(rule: Rule) {
         <p v-if="row.warning" class="import-warning">{{ row.warning }}</p>
         <label v-if="!row.blocked && !row.duplicate" class="import-check"><input v-model="row.remember" type="checkbox" :disabled="saving" /><span>Lembrar este nome e categoria para “{{ row.original_description }}” nas próximas importações deste espaço.</span></label>
       </article>
-      <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída e um nome para todos os lançamentos selecionados.</p><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length" @click="confirmImport">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
+      <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída e um nome para todos os lançamentos selecionados.</p><label v-if="statement?.requires_reconciliation" class="import-check"><input v-model="reconciliationReviewed" type="checkbox" :disabled="saving" /><span>Entendi que pagamentos, estornos e saldo anterior não serão lançados automaticamente. Vou conciliá-los em Faturas para que o saldo no Prumo reflita o banco.</span></label><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length || statement?.totals_match === false || (!!statement?.requires_reconciliation && !reconciliationReviewed)" @click="confirmImport">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
     </section>
     <details v-if="rules.length && !token" class="import-rules"><summary>Regras aprendidas neste espaço ({{ rules.length }})</summary><p>Você pode esquecer uma regra para voltar a usar o nome original nas próximas importações.</p><div v-for="rule in rules" :key="rule.id" class="import-rule"><span>{{ rule.merchant }} <ArrowRight :size="16" /> <strong>{{ rule.description }}</strong></span><button type="button" class="icon-button" :aria-label="`Esquecer regra ${rule.description}`" @click="removeRule(rule)"><Trash2 :size="18" /></button></div></details>
   </div>
@@ -138,6 +149,7 @@ async function removeRule(rule: Rule) {
 .import-source, .import-confirm { display: grid; gap: 20px; padding: 28px; background: white; border: 1px solid var(--line); border-radius: 18px; }
 .import-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; }.import-fields > div { min-width: 0; }.import-fields label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }.import-fields input, .import-fields select { width: 100%; min-height: 48px; border: 1px solid var(--line); background: white; border-radius: 10px; padding: 10px; font-size: 16px; }
 .import-upload { display: flex; align-items: center; gap: 18px; padding: 24px; border: 1px dashed var(--accent); border-radius: 14px; cursor: pointer; color: var(--accent); }.import-upload small { display: block; color: var(--muted); font-size: 13px; margin-top: 8px; }#import-file { max-width: 100%; font-size: 14px; }
+.import-statement-summary { display: grid; gap: 16px; padding: 24px; border-radius: 16px; background: #e8f1ed; }.import-statement-summary dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }.import-statement-summary dt { font-size: 14px; color: var(--muted); }.import-statement-summary dd { font-size: 22px; font-weight: 700; margin-top: 6px; }.import-statement-summary p { font-size: 14px; line-height: 1.6; }
 .import-review { display: grid; gap: 20px; }.import-review-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px; }.import-review-heading p { color: var(--muted); margin-top: 10px; }
 .import-caution { display: flex; align-items: flex-start; gap: 12px; padding: 20px; background: #fff4dd; border-radius: 14px; font-size: 14px; line-height: 1.6; }.import-caution svg { flex-shrink: 0; color: #80531b; }
 .import-row { padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: white; display: grid; gap: 18px; }.import-row.excluded { background: var(--canvas); }.import-row-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }.import-row-top > strong { margin-left: auto; font-size: 20px; }.import-row-top > span { font-size: 13px; font-weight: 600; }.import-original { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }.import-check { display: flex; gap: 12px; align-items: flex-start; line-height: 1.5; font-size: 14px; }.import-check input { width: 22px; height: 22px; flex-shrink: 0; margin-top: 1px; accent-color: var(--accent); }.import-warning { color: #80531b; font-size: 14px; line-height: 1.6; }.import-learned { display: flex; align-items: center; gap: 5px; color: var(--accent); }

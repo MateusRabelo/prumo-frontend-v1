@@ -21,7 +21,7 @@ import {
 
 const props = defineProps<{
   transaction?: Transaction | null;
-  invoiceContext?: { cardId: string; startDate: string; endDate: string; accountId?: string };
+  invoiceContext?: { invoiceId?: string; cardId: string; startDate: string; endDate: string; accountId?: string };
 }>();
 
 const emit = defineEmits<{
@@ -172,6 +172,7 @@ async function handleSubmit() {
     notes: form.value.notes || null,
   };
 
+  if (!props.transaction && props.invoiceContext?.invoiceId) payload.invoice_id = props.invoiceContext.invoiceId;
   try {
     if (props.transaction) {
       await api.put(`/transactions/${props.transaction.id}`, payload);

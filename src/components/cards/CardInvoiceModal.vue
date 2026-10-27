@@ -59,6 +59,7 @@ const canEditItems = computed(() => !!activeInvoice.value && Number(activeInvoic
 const selectedPaymentAccount = computed(() => eligibleAccounts.value.find(a => a.id === payForm.value.account_id));
 const projectedBalance = computed(() => Number(selectedPaymentAccount.value?.current_balance ?? 0) - (parseMoney(payForm.value.amount) || 0));
 const itemContext = computed(() => activeInvoice.value ? {
+  invoiceId: activeInvoice.value.id,
   cardId: props.card.id,
   startDate: activeInvoice.value.cycle_start_date || activeInvoice.value.closing_date.slice(0, 8) + '01',
   endDate: activeInvoice.value.closing_date,
