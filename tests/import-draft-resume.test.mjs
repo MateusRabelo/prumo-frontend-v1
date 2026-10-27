@@ -35,3 +35,23 @@ test('import review survives reload and leaving the screen without creating tran
     assert.equal(completed,false);
   }finally{await context.close();await browser.close();}
 });
+
+test('a delayed save from the previous screen cannot erase newly resumed local edits',async()=>{
+ const browser=await chromium.launch();const context=await browser.newContext({serviceWorkers:'block'});
+ let release;const gate=new Promise(resolve=>{release=resolve;});
+ try{await mockPrumo(context);const id='88888888-1111-4111-8111-111111111111';let revision=1,state={},created=false,first=true;let arrived;const received=new Promise(resolve=>{arrived=resolve;});
+ const metadata=()=>({id,draft_id:id,file_name:'delay.csv',revision,rows_count:1,updated_at:'2026-10-27T12:00:00Z',expires_at:'2026-11-26T12:00:00Z'});
+ const preview=()=>({...metadata(),preview_token:'signed',resolved_account_id:account,warnings:[],rows:[{index:0,date:'2026-10-27',amount:'50',original_description:'Loja',description:'Loja',type:'DESPESA',category_id:category,classification:'NECESSIDADE',blocked:false,duplicate:false}],review_state:state});
+ await context.route('**/api/v1/imports/**',async route=>{const path=new URL(route.request().url()).pathname;
+ if(path.endsWith('/preview')){created=true;return route.fulfill({json:preview()});}
+ if(path.endsWith('/drafts'))return route.fulfill({json:created?[metadata()]:[]});
+ if(path.endsWith('/drafts/'+id)){if(route.request().method()==='PUT'){if(!first)return route.abort('failed');first=false;state=route.request().postDataJSON();revision++;arrived();await gate;return route.fulfill({json:{...metadata(),preview_token:'renewed'}});}return route.fulfill({json:preview()});}
+ return route.fallback();});
+ const page=await context.newPage();await page.goto(origin+'/import');await page.locator('#import-file').setInputFiles({name:'delay.csv',mimeType:'text/csv',buffer:Buffer.from('fixture')});await page.getByRole('button',{name:/Gerar prévia/}).click();await page.locator('#import-name-0').fill('Primeira edição');await page.getByRole('button',{name:'Salvar rascunho',exact:true}).click();await received;
+ await page.getByRole('link',{name:'Dashboard',exact:true}).click();await page.getByRole('link',{name:'Importar extrato',exact:true}).click();await page.getByRole('button',{name:'Retomar',exact:true}).click();await page.locator('#import-name-0').fill('Edição mais recente');
+ const response=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/drafts/'+id));release();await (await response).finished();
+ await page.waitForTimeout(100);
+ const local=await page.evaluate(()=>{const key=Object.keys(localStorage).find(k=>k.startsWith('prumo:import-review:'));return key?JSON.parse(localStorage.getItem(key)).state.entries[0].description:null;});
+ assert.equal(local,'Edição mais recente');
+ }finally{release();await context.close();await browser.close();}
+});

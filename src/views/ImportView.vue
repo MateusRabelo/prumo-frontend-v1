@@ -20,6 +20,7 @@ interface StatementSummary { format?: string; issuer: string; year: number; mont
 interface Rule { id: string; merchant: string; description: string }
 const auth = useAuthStore(), route = useRoute(), router = useRouter();
 const draftOwner = auth.user?.id || '', draftFamily = auth.currentFamilyId || '';
+const draftClientId = crypto.randomUUID();
 interface DraftSummary { id:string; file_name:string; revision:number; updated_at:string; expires_at:string; rows_count:number }
 const drafts = ref<DraftSummary[]>([]), draftId = ref(''), draftRevision = ref(1), draftName = ref('');
 const draftStatus = ref(''), draftDirty = ref(false), draftConflict = ref(false), restoringDraft = ref(false);
@@ -193,7 +194,7 @@ function queueDraftSave() {
   const state = draftState();
   if (JSON.stringify(state) === lastSavedState) return;
   draftDirty.value = true;
-  const written = draftJournal(draftOwner, draftFamily, draftId.value).write({ revision: draftRevision.value, state });
+  const written = draftJournal(draftOwner, draftFamily, draftId.value).write({ client_id: draftClientId, revision: draftRevision.value, state });
   localJournalProtected.value = written;
   draftStatus.value = written ? 'Alterações protegidas neste dispositivo. Sincronizando…' : 'Sincronizando rascunho…';
   if (draftTimer) clearTimeout(draftTimer);
@@ -212,8 +213,13 @@ async function flushDraft(): Promise<boolean> {
       if (draftId.value !== id) return true;
       draftRevision.value = res.data.revision; token.value = res.data.preview_token;
       lastSavedState = serialized; draftDirty.value = JSON.stringify(draftState()) !== serialized;
-      if (draftDirty.value) draftJournal(draftOwner, draftFamily, id).write({ revision: draftRevision.value, state: draftState() });
-      else { draftJournal(draftOwner, draftFamily, id).remove(); localJournalProtected.value = false; }
+      const journal = draftJournal(draftOwner, draftFamily, id);
+      const latestJournal = journal.read();
+      // A response from an unmounted screen must not erase edits made after resuming it.
+      if (!latestJournal || latestJournal.client_id === draftClientId) {
+        if (draftDirty.value) journal.write({ client_id: draftClientId, revision: draftRevision.value, state: draftState() });
+        else { journal.remove(); localJournalProtected.value = false; }
+      }
       draftStatus.value = draftDirty.value ? 'Há novas alterações para sincronizar.' : 'Rascunho salvo na nuvem.';
       return true;
     } catch (err: any) {
