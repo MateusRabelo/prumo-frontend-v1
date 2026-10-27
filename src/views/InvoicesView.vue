@@ -84,7 +84,7 @@ onMounted(load);
       <button type="button" class="ui-button primary" @click="startCreate"><Plus :size="20" />Cadastrar fatura</button>
     </header>
     <div class="invoice-period"><label for="invoice-month">Mês de vencimento</label><input id="invoice-month" v-model="period" type="month" min="2000-01" max="2100-12" required @change="period && load()" /></div>
-    <div v-if="openCycles.length" class="flex flex-wrap items-center gap-3"><span class="field-help">O mês acima é o de vencimento. Compras de hoje, após o fechamento, entram em:</span><button v-for="[key, cycle] in openCycles" :key="key" type="button" class="ui-button" @click="selectCycle(key)">{{ cycle.label }} →</button></div>
+    <div v-if="openCycles.length" class="flex flex-wrap items-center gap-3"><span class="field-help">O mês acima é o de vencimento. Pelo ciclo dos seus cartões, compras de hoje entram em:</span><button v-for="[key, cycle] in openCycles" :key="key" type="button" class="ui-button" @click="selectCycle(key)">{{ cycle.label }} →</button></div>
     <div v-if="error" role="alert" class="form-error">{{ error }} <button type="button" class="ui-button" @click="load">Tentar novamente</button></div>
     <p v-else-if="loading" role="status">Conferindo suas faturas e contas…</p>
     <template v-else-if="data">

@@ -27,6 +27,7 @@ test('empty invoice explains its cycle and already-paid confirmation requires pa
     await page.getByRole('button',{name:'Já paguei',exact:true}).click();
     const form=page.locator('dialog[open]').last();
     await form.getByText(/valor histórico pago não será reconstruído/).waitFor();
+    await page.screenshot({path:'/tmp/prumo-external-payment-mobile.png'});
     await form.getByRole('button',{name:'Confirmar que já paguei'}).click();
     assert.equal(body,null);
     await form.locator('#external-payment-password').fill('test-password');
