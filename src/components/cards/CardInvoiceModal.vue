@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { parseMoney } from "@/utils/formatters";
+import { format } from 'date-fns';
 import AppDialog from "@/components/ui/AppDialog.vue";
+import TransactionModal from "@/components/transactions/TransactionModal.vue";
+import type { Transaction } from "@/types";
 import { ref, onMounted, computed, watch } from "vue";
 import { api } from "@/services/api";
 import type {
@@ -26,11 +29,13 @@ import {
   Tag,
   User,
   ArrowRight,
+  Plus, Pencil, Trash2,
 } from "lucide-vue-next";
 
 const props = defineProps<{
   card: CreditCard;
   accounts: FinancialAccount[];
+  initialPeriod?: { year: number; month: number };
 }>();
 
 const emit = defineEmits<{
@@ -46,6 +51,45 @@ const invoices = ref<CardInvoiceResponse[]>([]);
 const selectedYear = ref<number>(new Date().getFullYear());
 const selectedMonth = ref<number>(new Date().getMonth() + 1);
 const activeInvoice = ref<CardInvoiceResponse | null>(null);
+const showItemEditor = ref(false);
+const editingItem = ref<Transaction | null>(null);
+const removingItem = ref<string | null>(null);
+const itemBusy = ref(false);
+const canEditItems = computed(() => !!activeInvoice.value && Number(activeInvoice.value.paid_amount) === 0);
+const selectedPaymentAccount = computed(() => eligibleAccounts.value.find(a => a.id === payForm.value.account_id));
+const projectedBalance = computed(() => Number(selectedPaymentAccount.value?.current_balance ?? 0) - (parseMoney(payForm.value.amount) || 0));
+const itemContext = computed(() => activeInvoice.value ? {
+  cardId: props.card.id,
+  startDate: activeInvoice.value.cycle_start_date || activeInvoice.value.closing_date.slice(0, 8) + '01',
+  endDate: activeInvoice.value.closing_date,
+  accountId: props.card.account_id,
+} : undefined);
+async function openItem(item?: CardInvoiceItem) {
+  if (!canEditItems.value || itemBusy.value) return;
+  error.value = '';
+  itemBusy.value = true;
+  try {
+    editingItem.value = item ? (await api.get(`/transactions/${item.id}`)).data : null;
+    showItemEditor.value = true;
+  } catch (err: any) { error.value = err.response?.data?.detail || 'Não foi possível abrir a compra.'; }
+  finally { itemBusy.value = false; }
+}
+async function itemSaved() {
+  showItemEditor.value = false;
+  await loadInvoiceDetail(selectedYear.value, selectedMonth.value);
+  emit('invoice-paid');
+}
+async function deleteItem() {
+  if (!removingItem.value || itemBusy.value) return;
+  itemBusy.value = true;
+  try {
+    await api.delete(`/transactions/${removingItem.value}`);
+    removingItem.value = null;
+    await loadInvoiceDetail(selectedYear.value, selectedMonth.value);
+    emit('invoice-paid');
+  } catch (err: any) { error.value = err.response?.data?.detail || 'Não foi possível excluir a compra.'; }
+  finally { itemBusy.value = false; }
+}
 
 // Payment Dialog State
 const showPayDialog = ref(false);
@@ -54,14 +98,14 @@ const paymentKey = ref(crypto.randomUUID());
 const payError = ref("");
 const payForm = ref({
   account_id: "",
-  payment_date: new Date().toISOString().split("T")[0],
+  payment_date: format(new Date(), 'yyyy-MM-dd'),
   amount: "",
   notes: "",
 });
 
 const eligibleAccounts = computed(() => {
   return props.accounts.filter(
-    (a) => a.is_active && a.account_type !== "CREDIT_CARD",
+    (a) => a.is_active && ["CHECKING", "SAVINGS", "WALLET"].includes(a.account_type),
   );
 });
 
@@ -81,7 +125,10 @@ async function fetchInvoicesOverview() {
           inv.year === today.getFullYear() &&
           inv.month === today.getMonth() + 1,
       );
-    if (found) {
+    if (props.initialPeriod) {
+      selectedYear.value = props.initialPeriod.year;
+      selectedMonth.value = props.initialPeriod.month;
+    } else if (found) {
       selectedYear.value = found.year;
       selectedMonth.value = found.month;
     } else if (invoices.value.length > 0) {
@@ -128,7 +175,7 @@ function openPayDialog() {
   if (eligibleAccounts.value.length > 0 && !payForm.value.account_id) {
     payForm.value.account_id = eligibleAccounts.value[0].id;
   }
-  payForm.value.payment_date = new Date().toISOString().split("T")[0];
+  payForm.value.payment_date = format(new Date(), 'yyyy-MM-dd');
   payForm.value.amount = String(
     activeInvoice.value.remaining_amount || activeInvoice.value.total_amount,
   );
@@ -429,6 +476,14 @@ onMounted(() => {
                   {{ activeInvoice.items.length }}
                 </span>
               </h3>
+              <button v-if="canEditItems" type="button" class="ui-button primary" :disabled="itemBusy" @click="openItem()"><Plus :size="18" />Adicionar compra</button>
+            </div>
+            <p v-if="!canEditItems" class="field-help mb-4">Esta fatura já recebeu pagamento. Suas compras ficam protegidas para preservar o histórico.</p>
+            <p class="field-help mb-4">Compras à vista podem ser editadas ou excluídas aqui antes do primeiro pagamento. Gerencie parcelas em Parcelamentos.</p>
+            <div v-if="removingItem" class="context-message mb-4" role="alert">
+              <p>Excluir esta compra? Ela sairá da fatura e dos lançamentos.</p>
+              <button type="button" class="ui-button" @click="removingItem = null">Cancelar</button>
+              <button type="button" class="ui-button primary" :disabled="itemBusy" @click="deleteItem">Confirmar exclusão</button>
             </div>
 
             <!-- Empty Items State -->
@@ -501,6 +556,10 @@ onMounted(() => {
                 </div>
 
                 <div class="text-right">
+                  <div v-if="canEditItems && !item.is_installment" class="flex gap-2 justify-end mb-2">
+                    <button type="button" class="icon-button" :aria-label="`Editar ${item.description}`" :disabled="itemBusy" @click="openItem(item)"><Pencil :size="18" /></button>
+                    <button type="button" class="icon-button" :aria-label="`Excluir ${item.description}`" :disabled="itemBusy" @click="removingItem = item.id"><Trash2 :size="18" /></button>
+                  </div>
                   <span class="text-base font-bold text-gray-900 block">
                     {{ formatBRL(item.amount) }}
                   </span>
@@ -618,6 +677,11 @@ onMounted(() => {
           </div>
 
           <!-- Payment Date & Amount -->
+          <div v-if="selectedPaymentAccount" class="context-message" role="status">
+            <p>Saldo após este pagamento: <strong>{{ formatBRL(projectedBalance) }}</strong>.
+              <span v-if="projectedBalance < 0"> Faltam {{ formatBRL(-projectedBalance) }} nesta conta. Você pode fazer pagamentos parciais usando contas diferentes.</span>
+            </p>
+          </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-base font-semibold text-gray-700 mb-1">
@@ -681,5 +745,6 @@ onMounted(() => {
         </form>
       </div>
     </AppDialog>
+    <TransactionModal v-if="showItemEditor" :transaction="editingItem" :invoice-context="itemContext" @close="showItemEditor = false" @saved="itemSaved" />
   </AppDialog>
 </template>

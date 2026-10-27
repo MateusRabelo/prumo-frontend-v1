@@ -2306,3 +2306,9 @@ button.bg-emerald-500 {
     color: var(--muted);
   }
 }
+
+/* Keep installed app controls outside notches and the home indicator. */
+@media (display-mode: standalone) {
+  .app-shell { padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  .app-main { padding-bottom: max(64px, env(safe-area-inset-bottom)); }
+}

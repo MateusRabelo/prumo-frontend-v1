@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.playwright-cli/
+playwright-report/
+test-results/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+.env
+.env.*
+!.env.example
+*.log

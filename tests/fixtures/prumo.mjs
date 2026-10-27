@@ -180,6 +180,7 @@ const invoice = {
   year: 2026,
   month: 10,
   period_label: "Outubro / 2026",
+  cycle_start_date: "2026-09-21",
   closing_date: "2026-10-20",
   due_date: "2026-10-28",
   total_amount: 842.37,
@@ -243,6 +244,11 @@ export async function mockPrumo(context) {
       ];
     else if (path.endsWith("/settings/payment-methods"))
       data = [{ id: id(15), name: "Pix", is_active: true }];
+    else if (path.endsWith("/cards/invoices/overview")) data = {
+      bank_balance: 3482.1, available_for_payment: 3482.1, total_amount: 842.37,
+      paid_amount: 0, remaining_amount: 842.37, shortfall: 0, balance_after_payment: 2639.73,
+      invoices: [{card_name: cards[0].name, invoice}],
+    };
     else if (path.endsWith("/cards")) data = cards;
     else if (/\/cards\/[^/]+\/invoices$/.test(path)) data = [invoice];
     else if (/\/cards\/[^/]+\/invoices\/\d+\/\d+$/.test(path)) data = invoice;

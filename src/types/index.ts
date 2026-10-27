@@ -399,6 +399,7 @@ export interface CardInvoiceItem {
 }
 
 export interface CardInvoiceResponse {
+  cycle_start_date: string;
   id?: string;
   card_id: string;
   year: number;

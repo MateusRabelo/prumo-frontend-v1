@@ -17,6 +17,8 @@ import {
   LogOut,
   ChevronDown,
   X,
+  Receipt,
+  FileUp,
 } from "lucide-vue-next";
 const props = defineProps<{ mobileOpen?: boolean }>();
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -30,6 +32,8 @@ const groups = [
       { name: "Visão geral", path: "/dashboard", icon: LayoutDashboard },
       { name: "Lançamentos", path: "/transactions", icon: ArrowLeftRight },
       { name: "Contas e cartões", path: "/accounts-cards", icon: Wallet },
+      { name: "Faturas", path: "/invoices", icon: Receipt },
+      { name: "Importar extrato", path: "/import", icon: FileUp },
       { name: "Parcelamentos", path: "/installments", icon: CreditCard },
     ],
   },

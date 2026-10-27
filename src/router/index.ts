@@ -14,6 +14,8 @@ const GoalsView = () => import("@/views/GoalsView.vue");
 const ReportsView = () => import("@/views/ReportsView.vue");
 const SettingsView = () => import("@/views/SettingsView.vue");
 const FamilyView = () => import("@/views/FamilyView.vue");
+const InvoicesView = () => import("@/views/InvoicesView.vue");
+const ImportView = () => import("@/views/ImportView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
@@ -45,6 +47,8 @@ const router = createRouter({
       component: AppLayout,
       meta: { requiresAuth: true },
       children: [
+        { path: 'import', name: 'import', component: ImportView, meta: { title: 'Importar extrato' } },
+        { path: 'invoices', name: 'invoices', component: InvoicesView, meta: { title: 'Faturas' } },
         {
           path: "",
           redirect: "/dashboard",

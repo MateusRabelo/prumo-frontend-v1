@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { parseMoney } from "@/utils/formatters";
+import { format } from "date-fns";
 import AppDialog from "@/components/ui/AppDialog.vue";
 import { ref, onMounted, computed, watch } from "vue";
 import { api } from "@/services/api";
@@ -20,6 +21,7 @@ import {
 
 const props = defineProps<{
   transaction?: Transaction | null;
+  invoiceContext?: { cardId: string; startDate: string; endDate: string; accountId?: string };
 }>();
 
 const emit = defineEmits<{
@@ -36,16 +38,20 @@ const accounts = ref<FinancialAccount[]>([]);
 const cards = ref<CreditCard[]>([]);
 const paymentMethods = ref<PaymentMethod[]>([]);
 const responsibles = ref<ResponsiblePerson[]>([]);
+const today = format(new Date(), 'yyyy-MM-dd');
+const invoiceDate = props.invoiceContext
+  ? [props.invoiceContext.startDate, today, props.invoiceContext.endDate].sort()[1]
+  : today;
 
 const form = ref({
   description: props.transaction?.description || "",
   type: props.transaction?.type || "DESPESA",
   amount: props.transaction?.amount ? String(props.transaction.amount) : "",
-  date: props.transaction?.date || new Date().toISOString().split("T")[0],
+  date: props.transaction?.date || invoiceDate,
   category_id: props.transaction?.category_id || "",
-  account_id: props.transaction?.account_id || "",
+  account_id: props.transaction?.account_id || props.invoiceContext?.accountId || "",
   destination_account_id: props.transaction?.destination_account_id || "",
-  card_id: props.transaction?.card_id || "",
+  card_id: props.transaction?.card_id || props.invoiceContext?.cardId || "",
   responsible_name: props.transaction?.responsible_name || "",
   is_shared: props.transaction?.is_shared || false,
   classification: props.transaction?.classification || "NECESSIDADE",
@@ -192,7 +198,7 @@ async function handleSubmit() {
         class="flex items-start justify-between gap-4 border-b border-slate-200 pb-5"
       >
         <div>
-          <h2>{{ transaction ? "Editar lançamento" : "Novo lançamento" }}</h2>
+          <h2>{{ invoiceContext ? (transaction ? "Editar compra da fatura" : "Adicionar compra à fatura") : (transaction ? "Editar lançamento" : "Novo lançamento") }}</h2>
           <p class="text-slate-500 mt-2">
             Uma conta registrada, um mês mais claro.
           </p>
@@ -205,7 +211,7 @@ async function handleSubmit() {
           <X :size="24" />
         </button>
       </div>
-      <div class="transaction-type-switch" aria-label="Tipo de lançamento">
+      <div v-if="!invoiceContext" class="transaction-type-switch" aria-label="Tipo de lançamento">
         <button
           type="button"
           :aria-pressed="form.type === 'DESPESA'"
@@ -270,6 +276,8 @@ async function handleSubmit() {
               id="transaction-date"
               v-model="form.date"
               type="date"
+              :min="invoiceContext?.startDate"
+              :max="invoiceContext?.endDate"
               required
             />
           </div>
@@ -381,7 +389,7 @@ async function handleSubmit() {
         </div>
         <div v-if="form.type === 'DESPESA' && cards.length">
           <label for="transaction-card">Compra no cartão?</label
-          ><select id="transaction-card" v-model="form.card_id">
+          ><select id="transaction-card" v-model="form.card_id" :disabled="!!invoiceContext">
             <option value="">Não, pagamento pela conta</option>
             <option v-for="card in cards" :key="card.id" :value="card.id">
               {{ card.name }} · final {{ card.last_digits || "—" }}

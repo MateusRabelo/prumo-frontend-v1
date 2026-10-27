@@ -4,6 +4,8 @@ import { chromium } from "playwright";
 import { origin, mockPrumo } from "./fixtures/prumo.mjs";
 
 const pages = [
+  "import",
+  "invoices",
   "dashboard",
   "transactions",
   "accounts-cards",
