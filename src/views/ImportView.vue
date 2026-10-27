@@ -34,6 +34,34 @@ const informational = computed(() => rows.value.filter(row => ['payment','refund
 watch([cardId, source], () => { const card = cards.value.find(c => c.id === cardId.value); if (source.value === 'card' && card?.account_id) accountId.value = card.account_id; });
 const selected = computed(() => rows.value.filter(row => row.selected && !row.blocked && !row.duplicate));
 const unresolved = computed(() => selected.value.some(row => !row.type || !row.description.trim() || ((row.import_installment && !row.installment_info?.matching_plan_id || row.import_subscription) && !row.category_id)));
+const bulkCategory = ref('');
+const bulkScope = ref('installments');
+const bulkRemember = ref(true);
+const bulkMessage = ref('');
+const bulkTargets = computed(() => selected.value.filter(row => {
+  if (bulkScope.value === 'installments') return !!row.installment_info && !row.category_id;
+  if (bulkScope.value === 'uncategorized') return !row.category_id;
+  return true;
+}).filter(row => !bulkCategory.value || availableCategories(row).some(c => c.id === bulkCategory.value)));
+const categoryGroups = computed(() => {
+  const groups = new Map<string, { key: string; name: string; rows: Row[]; total: number }>();
+  for (const row of purchases.value) {
+    const key = row.category_id || '';
+    if (!groups.has(key)) groups.set(key, { key, name: categories.value.find(c => c.id === key)?.name || 'Sem categoria', rows: [], total: 0 });
+    const group = groups.get(key)!; group.rows.push(row);
+    if (row.selected && !row.blocked && !row.duplicate) group.total += Number(row.amount);
+  }
+  return [...groups.values()].sort((a,b) => !a.key ? -1 : !b.key ? 1 : a.name.localeCompare(b.name, 'pt-BR'));
+});
+function applyBulkCategory() {
+  if (!bulkCategory.value || saving.value) return;
+  const targets = [...bulkTargets.value];
+  for (const row of targets) { row.category_id = bulkCategory.value; row.remember = bulkRemember.value || row.remember; }
+  reviewed.value = false;
+  bulkMessage.value = `${targets.length} lançamentos atualizados. Confira os grupos abaixo antes de salvar.`;
+}
+function merchantBase(name: string) { return name.replace(/\s*(?:[-·]\s*)?parcelas?\s+\d+\s*\/\s*(?:\d+|\*)\s*$/i, '').trim(); }
+function rulePattern(row: Row) { return row.installment_info ? `${merchantBase(row.original_description)} · Parcela */*` : row.original_description; }
 const totals = computed(() => selected.value.reduce((total, row) => {
   const cents = Math.round(Number(row.amount) * 100);
   if (row.type === 'RECEITA') total.income += cents;
@@ -72,12 +100,24 @@ async function preview() {
     }
     if (res.data.resolved_card_id) cardId.value = res.data.resolved_card_id;
     if (res.data.resolved_account_id) accountId.value = res.data.resolved_account_id;
+    bulkMessage.value = ''; bulkCategory.value = ''; bulkScope.value = rows.value.some(r => r.installment_info && !r.category_id) ? 'installments' : 'uncategorized';
     statement.value = res.data.statement || null; reconciliationReviewed.value = false;
     warnings.value = res.data.warnings; token.value = res.data.preview_token; reviewed.value = false;
   } catch (err: any) { error.value = apiErrorMessage(err, 'Não foi possível ler o arquivo. Tente exportar novamente pelo banco.'); }
   finally { loading.value = false; }
 }
-function rename(row: Row) { row.remember = row.description.trim() !== row.original_description; reviewed.value = false; }
+function rename(row: Row) {
+  row.remember = merchantBase(row.description) !== merchantBase(row.original_description);
+  if (row.installment_info) {
+    const base = merchantBase(row.original_description).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    for (const other of rows.value) {
+      if (other !== row && other.installment_info && !other.blocked && !other.duplicate && merchantBase(other.original_description).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase() === base) {
+        other.description = merchantBase(row.description); other.remember = row.remember;
+      }
+    }
+  }
+  reviewed.value = false;
+}
 function reset() { statement.value = null; reconciliationReviewed.value = false; token.value = ''; rows.value = []; reviewed.value = false; error.value = ''; }
 function changeType(row: Row) {
   row.category_id = availableCategories(row).some(c => c.id === row.suggestedCategory) ? row.suggestedCategory : null;
@@ -134,7 +174,9 @@ async function removeRule(rule: Rule) {
       </section>
       <div class="import-caution"><AlertCircle :size="22" /><p>Compare com o arquivo original: saldos, totais e linhas não reconhecidas ficam fora da importação. Confira especialmente datas, parcelas e pagamentos de fatura. Possíveis duplicados vêm desmarcados; duplicados de importações anteriores não serão salvos novamente.</p></div>
       <details v-if="warnings.length"><summary>{{ warnings.length }} avisos de leitura — confira no arquivo original</summary><ul><li v-for="warning in warnings" :key="warning">{{ warning }}</li></ul></details>
-      <article v-for="row in purchases" :key="row.index" class="import-row" :class="{ excluded: !row.selected || row.blocked || row.duplicate }">
+      <section class="import-source" aria-label="Categorias em lote"><h3>Organize várias compras de uma vez</h3><div class="import-fields"><div><label for="bulk-scope">Aplicar em</label><select id="bulk-scope" v-model="bulkScope" :disabled="saving"><option value="installments">Parcelas selecionadas sem categoria</option><option value="uncategorized">Todos os selecionados sem categoria</option><option value="selected">Todos os selecionados (substituir categoria)</option></select></div><div><label for="bulk-category">Categoria em lote</label><select id="bulk-category" v-model="bulkCategory" :disabled="saving"><option value="" disabled>Escolha uma categoria</option><option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }} · {{ c.type === 'RECEITA' ? 'Receitas' : c.type === 'DESPESA' ? 'Despesas' : 'Receitas e despesas' }}</option></select></div></div><label class="import-check"><input v-model="bulkRemember" type="checkbox" :disabled="saving"/><span>Lembrar estas categorias para os mesmos estabelecimentos nas próximas importações.</span></label><p class="field-help">Somente lançamentos selecionados, permitidos e compatíveis com o tipo da categoria serão alterados. As categorias atuais são preservadas nas opções “sem categoria”.</p><button type="button" class="ui-button primary" :disabled="saving || !bulkCategory || !bulkTargets.length" @click="applyBulkCategory">Aplicar a {{ bulkTargets.length }} lançamentos</button><p v-if="bulkMessage" role="status">{{ bulkMessage }}</p></section>
+      <details v-for="group in categoryGroups" :key="group.key" class="import-category-group" open><summary class="import-category-heading"><h3>{{ group.name }}</h3><p>{{ group.rows.length }} lançamentos · selecionados: {{ formatBRL(group.total) }}</p></summary>
+      <article v-for="row in group.rows" :key="row.index" class="import-row" :class="{ excluded: !row.selected || row.blocked || row.duplicate }">
         <div class="import-row-top"><label class="import-check"><input v-model="row.selected" type="checkbox" :disabled="row.blocked || row.duplicate || saving" @change="reviewed = false" /><span>{{ formatDateBR(row.date) }}</span></label><strong>{{ formatBRL(Number(row.amount)) }}</strong><span v-if="row.duplicate">Já importado</span><span v-else-if="row.possible_duplicate">Possível duplicado</span><span v-else-if="row.learned" class="import-learned"><Lightbulb :size="16" />Nome reconhecido</span></div>
         <p class="import-original">No extrato: {{ row.original_description }}</p>
         <div class="import-fields">
@@ -145,8 +187,8 @@ async function removeRule(rule: Rule) {
         <label v-if="row.installment_info && source === 'card' && !row.duplicate" class="import-check"><input v-model="row.import_installment" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.installment_info.matching_plan_id ? 'Atualizar o parcelamento existente' : 'Criar acompanhamento deste parcelamento' }} · parcela {{ row.installment_info.number }}/{{ row.installment_info.count }}. Somente esta parcela e as futuras serão acompanhadas; valores futuros são estimados pelo valor desta parcela. Escolha uma categoria para criar o plano.</span></label>
         <div v-if="row.subscription_info && !row.blocked && !row.duplicate" class="import-statement-summary"><p>{{ row.subscription_info.reason }}</p><label class="import-check"><input v-model="row.import_subscription" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.subscription_info.matching_id ? 'Vincular esta cobrança à assinatura existente e atualizar o próximo ciclo' : 'Acompanhar esta compra como assinatura' }}. A cobrança será lançada uma vez; ciclos futuros ficam previstos em Assinaturas.</span></label><div v-if="row.import_subscription"><label :for="`subscription-frequency-${row.index}`">Frequência confirmada</label><select :id="`subscription-frequency-${row.index}`" v-model="row.subscription_frequency" class="w-full border rounded-lg p-3" @change="reviewed = false"><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual</option><option value="WEEKLY">Semanal</option></select></div></div>
         <p v-if="row.warning && !row.import_installment" class="import-warning">{{ row.warning }}</p>
-        <label v-if="!row.blocked && !row.duplicate" class="import-check"><input v-model="row.remember" type="checkbox" :disabled="saving" /><span>Lembrar este nome e categoria para “{{ row.original_description }}” nas próximas importações deste espaço.</span></label>
-      </article>
+        <label v-if="!row.blocked && !row.duplicate" class="import-check"><input v-model="row.remember" type="checkbox" :disabled="saving" /><span>Lembrar este nome e categoria para “{{ rulePattern(row) }}” nas próximas importações deste espaço.</span></label>
+      </article></details>
       <section v-if="informational.length" class="import-statement-summary" aria-label="Pagamentos e créditos do extrato"><h3>Pagamentos e créditos reconhecidos</h3><p>Estas movimentações explicam o saldo da fatura e não serão registradas como novas despesas. Confira os pagamentos em Faturas para evitar descontar duas vezes o dinheiro da conta.</p><div v-for="row in informational" :key="row.index" class="import-row-top"><span>{{ formatDateBR(row.date) }} · {{ row.original_description }}</span><strong>{{ formatBRL(Number(row.amount)) }}</strong></div><RouterLink to="/invoices" class="underline">Conferir minhas faturas</RouterLink></section>
       <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída, nome e a categoria dos parcelamentos e assinaturas selecionados.</p><label v-if="statement?.requires_reconciliation" class="import-check"><input v-model="reconciliationReviewed" type="checkbox" :disabled="saving" /><span>Entendi que pagamentos, estornos e saldo anterior não serão lançados automaticamente. Vou conciliá-los em Faturas para que o saldo no Prumo reflita o banco.</span></label><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length || statement?.totals_match === false || (!!statement?.requires_reconciliation && !reconciliationReviewed)" @click="confirmImport">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
     </section>
@@ -160,6 +202,7 @@ async function removeRule(rule: Rule) {
 .import-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; }.import-fields > div { min-width: 0; }.import-fields label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }.import-fields input, .import-fields select { width: 100%; min-height: 48px; border: 1px solid var(--line); background: white; border-radius: 10px; padding: 10px; font-size: 16px; }
 .import-upload { display: flex; align-items: center; gap: 18px; padding: 24px; border: 1px dashed var(--accent); border-radius: 14px; cursor: pointer; color: var(--accent); }.import-upload small { display: block; color: var(--muted); font-size: 13px; margin-top: 8px; }#import-file { max-width: 100%; font-size: 14px; }
 .import-statement-summary { display: grid; gap: 16px; padding: 24px; border-radius: 16px; background: #e8f1ed; }.import-statement-summary dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }.import-statement-summary dt { font-size: 14px; color: var(--muted); }.import-statement-summary dd { font-size: 22px; font-weight: 700; margin-top: 6px; }.import-statement-summary p { font-size: 14px; line-height: 1.6; }
+.import-category-group > .import-row { margin-top: 16px; }.import-category-heading { padding: 20px 0 4px; border-top: 1px solid var(--line); }.import-category-heading p { color: var(--muted); font-size: 14px; margin-top: 8px; }
 .import-review { display: grid; gap: 20px; }.import-review-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px; }.import-review-heading p { color: var(--muted); margin-top: 10px; }
 .import-caution { display: flex; align-items: flex-start; gap: 12px; padding: 20px; background: #fff4dd; border-radius: 14px; font-size: 14px; line-height: 1.6; }.import-caution svg { flex-shrink: 0; color: #80531b; }
 .import-row { padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: white; display: grid; gap: 18px; }.import-row.excluded { background: var(--canvas); }.import-row-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }.import-row-top > strong { margin-left: auto; font-size: 20px; }.import-row-top > span { font-size: 13px; font-weight: 600; }.import-original { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }.import-check { display: flex; gap: 12px; align-items: flex-start; line-height: 1.5; font-size: 14px; }.import-check input { width: 22px; height: 22px; flex-shrink: 0; margin-top: 1px; accent-color: var(--accent); }.import-warning { color: #80531b; font-size: 14px; line-height: 1.6; }.import-learned { display: flex; align-items: center; gap: 5px; color: var(--accent); }
