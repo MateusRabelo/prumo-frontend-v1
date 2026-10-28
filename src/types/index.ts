@@ -147,6 +147,7 @@ export interface Transaction {
   notes?: string;
   installment_id?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface TransactionSummary {

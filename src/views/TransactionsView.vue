@@ -3,7 +3,7 @@ import TransactionCardInfo from "@/components/transactions/TransactionCardInfo.v
 import { useFeedback } from "@/composables/useFeedback";
 const feedback = useFeedback();
 import { useRoute } from "vue-router";
-import { ref, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { api } from "@/services/api";
 import type {
   Category,
@@ -77,7 +77,39 @@ async function loadFilterOptions() {
   }
 }
 
+const selectedIds = ref<string[]>([]);
+const bulkResponsible = ref("");
+const bulkStatus = ref("");
+const bulkSaving = ref(false);
+const bulkError = ref("");
+const allVisibleSelected = computed(() => transactions.value.length > 0 && transactions.value.every(t => selectedIds.value.includes(t.id)));
+function toggleVisible() {
+  selectedIds.value = allVisibleSelected.value ? [] : transactions.value.map(t => t.id);
+}
+async function applyBulk() {
+  if (bulkSaving.value || !selectedIds.value.length || (!bulkResponsible.value && !bulkStatus.value)) return;
+  const rows = transactions.value.filter(t => selectedIds.value.includes(t.id));
+  const changes = [bulkResponsible.value ? `Responsável: ${bulkResponsible.value}` : '', bulkStatus.value ? `Situação: ${bulkStatus.value === 'REALIZADA' ? 'Concluída' : bulkStatus.value === 'PENDENTE' ? 'Pendente' : 'Vencida'}` : ''].filter(Boolean).join('. ');
+  if (!(await feedback.confirm(`Alterar ${rows.length} lançamentos? ${changes}. No crédito, isso não registra pagamento da fatura. Saldos de contas podem mudar ao alterar a situação.`))) return;
+  bulkSaving.value = true;
+  bulkError.value = '';
+  try {
+    const res = await api.post('/transactions/bulk', {
+      items: rows.map(t => ({id: t.id, updated_at: t.updated_at})),
+      ...(bulkResponsible.value ? {responsible_name: bulkResponsible.value} : {}),
+      ...(bulkStatus.value ? {status: bulkStatus.value} : {}),
+    });
+    feedback.notify(`${res.data.updated} lançamentos atualizados`, "success");
+    bulkResponsible.value = ''; bulkStatus.value = '';
+    await loadTransactions();
+  } catch (err: any) {
+    bulkError.value = typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Não foi possível aplicar as alterações. Confira a lista antes de tentar novamente.';
+  } finally { bulkSaving.value = false; }
+}
+
 async function loadTransactions() {
+  selectedIds.value = [];
+
   loading.value = true;
   loadError.value = "";
   try {
@@ -421,12 +453,37 @@ onMounted(() => {
       </div>
     </div>
 
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 space-y-4" aria-label="Ações em massa" :aria-busy="bulkSaving">
+      <div class="flex flex-wrap items-center gap-4">
+        <label class="flex items-center gap-3 font-semibold">
+          <input type="checkbox" :checked="allVisibleSelected" :indeterminate="selectedIds.length > 0 && !allVisibleSelected" :disabled="loading || bulkSaving || !transactions.length" @change="toggleVisible" class="h-5 w-5 accent-emerald-700" />
+          Selecionar esta página
+        </label>
+        <span aria-live="polite">{{ selectedIds.length }} selecionados</span>
+        <button v-if="selectedIds.length" type="button" :disabled="bulkSaving" @click="selectedIds = []" class="font-semibold text-emerald-800">Limpar seleção</button>
+      </div>
+      <div v-if="selectedIds.length" class="space-y-3">
+        <div class="flex flex-wrap items-end gap-4">
+          <label class="flex min-w-0 w-full sm:w-auto flex-col gap-2">Responsável
+            <select aria-label="Responsável do lote" v-model="bulkResponsible" :disabled="bulkSaving" class="w-full min-w-0"><option value="">Manter responsável</option><option v-for="r in responsibles.filter(r => r.is_active)" :key="r.id" :value="r.name">{{ r.name }}</option></select>
+          </label>
+          <label class="flex min-w-0 w-full sm:w-auto flex-col gap-2">Situação
+            <select aria-label="Situação do lote" v-model="bulkStatus" :disabled="bulkSaving" class="w-full min-w-0"><option value="">Manter situação</option><option value="REALIZADA">Concluída (paga / recebida / transferida)</option><option value="PENDENTE">Pendente</option><option value="VENCIDA">Vencida</option></select>
+          </label>
+          <button class="ui-button primary" type="button" :disabled="bulkSaving || (!bulkResponsible && !bulkStatus)" @click="applyBulk">{{ bulkSaving ? 'Aplicando…' : `Aplicar em ${selectedIds.length} lançamentos` }}</button>
+        </div>
+        <p class="text-sm text-slate-600">A seleção vale apenas para esta página e é limpa ao mudar os filtros ou a página. Parcelas e movimentos de faturas pagas devem ser alterados no fluxo correspondente. No crédito, mudar a situação não paga a fatura.</p>
+        <p v-if="bulkError" role="alert" class="text-red-700">{{ bulkError }} Nenhuma alteração do lote foi salva.</p>
+      </div>
+    </section>
+
     <!-- Transactions Table -->
     <div
       class="rounded-2xl bg-white shadow-2xs border border-slate-200/80 overflow-hidden"
     >
       <div class="mobile-transactions md:hidden">
         <article v-for="transaction in transactions" :key="transaction.id">
+          <label class="flex items-center gap-3 mb-3"><input type="checkbox" v-model="selectedIds" :value="transaction.id" :disabled="bulkSaving || loading" class="h-5 w-5 accent-emerald-700" />Selecionar {{ transaction.description }}</label>
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-sm text-slate-500">
@@ -502,7 +559,7 @@ onMounted(() => {
             <tr
               class="border-b border-slate-100 bg-slate-50/75 text-sm font-bold normal-case tracking-normal text-slate-500"
             >
-              <th class="py-3 px-4">Data</th>
+              <th class="py-3 px-4"><span class="sr-only">Selecionar</span></th><th class="py-3 px-4">Data</th>
               <th class="py-3 px-4">Descrição</th>
               <th class="py-3 px-4">Categoria</th>
               <th class="py-3 px-4">Conta e cartão</th>
@@ -518,6 +575,7 @@ onMounted(() => {
               :key="t.id"
               class="hover:bg-slate-50/60 transition-colors"
             >
+              <td class="py-3 px-4"><input type="checkbox" v-model="selectedIds" :value="t.id" :aria-label="`Selecionar ${t.description}`" :disabled="bulkSaving || loading" class="h-5 w-5 accent-emerald-700" /></td>
               <td
                 class="py-3 px-4 whitespace-nowrap text-slate-600 font-medium"
               >
@@ -622,7 +680,7 @@ onMounted(() => {
             </tr>
 
             <tr v-if="transactions.length === 0 && !loading">
-              <td colspan="8" class="py-12 text-center text-slate-400">
+              <td colspan="9" class="py-12 text-center text-slate-400">
                 Nenhuma transação encontrada com os filtros selecionados.
               </td>
             </tr>
