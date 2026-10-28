@@ -45,7 +45,7 @@ test('statement suggestions require explicit subscription and category review',a
     assert.equal(await subscription.isChecked(),false);await subscription.check();
     await page.getByRole('checkbox',{name:/Conferi as datas/}).check();const save=page.getByRole('button',{name:/Salvar 1 lançamentos/});assert.equal(await save.isDisabled(),true);
     await page.locator('#import-category-0').selectOption(category);await page.locator('#subscription-frequency-0').selectOption('YEARLY');await page.getByRole('checkbox',{name:/Conferi as datas/}).check();
-    await save.click();await page.getByRole('heading',{name:'1 lançamentos importados'}).waitFor();
+    await save.click();await page.getByRole('button',{name:'Confirmar destino e importar',exact:true}).click();await page.getByRole('heading',{name:'1 lançamentos importados'}).waitFor();
     assert.equal(body.entries[0].import_subscription,true);assert.equal(body.entries[0].subscription_frequency,'YEARLY');
   }finally{await context.close();await browser.close();}
 });

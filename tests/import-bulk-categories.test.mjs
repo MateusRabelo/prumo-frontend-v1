@@ -30,6 +30,7 @@ test('bulk categories organize twenty installments and rename recurring merchant
     assert.equal(await page.locator('.import-category-heading h3').filter({hasText:'Mercado'}).count(),1);
     await page.getByRole('checkbox',{name:/Conferi as datas/}).check();
     await page.getByRole('button',{name:/Salvar 21 lançamentos/}).click();
+    await page.getByRole('button',{name:'Confirmar destino e importar',exact:true}).click();
     await page.getByRole('heading',{name:'21 lançamentos importados'}).waitFor();
     assert.equal(body.entries.filter(e=>e.category_id===category && e.import_installment && e.remember).length,20);
   }finally{await context.close();await browser.close();}

@@ -41,6 +41,7 @@ test('statement preview requires review and remembers merchant renaming only on 
     assert.equal(await page.evaluate(() => document.querySelector('main').scrollWidth > document.querySelector('main').clientWidth + 1), false);
     await page.screenshot({ path: '/tmp/prumo-import-preview.png' });
     await save.click();
+    await page.getByRole('button',{name:'Confirmar destino e importar',exact:true}).click();
     await page.getByRole('heading', { name: '1 lançamentos importados' }).waitFor();
     assert.equal(confirmed.entries.length, 1);
     assert.equal(confirmed.entries[0].description, 'Cantina faculdade');
@@ -82,6 +83,7 @@ test('Nubank summary separates purchases from debt and requires reconciliation a
     await page.getByRole('checkbox', { name: /Entendi que pagamentos/ }).check();
     assert.equal(await save.isEnabled(), true);
     await save.click();
+    await page.getByRole('button',{name:'Confirmar destino e importar',exact:true}).click();
     await page.getByRole('heading', { name: '1 lançamentos importados' }).waitFor();
     assert.equal(body.reconciliation_reviewed, true);
   } finally { await context.close(); await browser.close(); }
@@ -118,6 +120,7 @@ test('recognized installments require a category and payments stay in the final 
     assert.equal(await save.isEnabled(),true);
     await page.screenshot({path:'/tmp/prumo-import-installment-mobile.png',fullPage:true});
     await save.click();
+    await page.getByRole('button',{name:'Confirmar destino e importar',exact:true}).click();
     await page.getByRole('heading',{name:'1 lançamentos importados'}).waitFor();
     assert.equal(saved.entries[0].import_installment,true);
     assert.equal(saved.entries.length,1);
@@ -137,7 +140,8 @@ test('validation failures identify the rejected field and preserve the review wi
     await page.locator('#import-file').setInputFiles({name:'sample.ofx',mimeType:'application/x-ofx',buffer:Buffer.from('<OFX>test</OFX>')});
     await page.getByRole('button',{name:/Gerar prévia/}).click();await page.getByRole('checkbox',{name:/Conferi as datas/}).check();
     await page.getByRole('button',{name:/Salvar 1 lançamentos/}).click();
-    await page.getByRole('alert').filter({hasText:/Prévia do extrato/}).waitFor();
+    await page.getByRole('button',{name:'Confirmar destino e importar',exact:true}).click();
+    await page.getByRole('dialog').getByRole('alert').filter({hasText:/Prévia do extrato/}).waitFor();
     assert.equal(await page.locator('#import-name-0').inputValue(),'Compra exemplo');
     assert.doesNotMatch(await page.locator('body').innerText(),/sensitive-preview-token/);
   }finally{await context.close();await browser.close();}

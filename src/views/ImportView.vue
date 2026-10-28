@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { draftJournal } from '@/composables/importDraftJournal';
@@ -16,7 +16,7 @@ interface Row {
   subscription_info?: { matching_id?: string; category_id?: string; frequency: string; reason: string }; import_subscription?: boolean; subscription_frequency?: string;
   installment_info?: { number: number; count: number; description: string; matching_plan_id?: string }; import_installment?: boolean; duplicate: boolean; possible_installment?: boolean; refunded_in_statement?: boolean; possible_duplicate: boolean; learned: boolean; selected: boolean; remember: boolean;
 }
-interface StatementSummary { format?: string; issuer: string; year: number; month: number; purchases: string | null; previous_balance: string | null; amount_due: string | null; recognized_credits: string; recognized_payments: string; totals_match: boolean | null; requires_reconciliation: boolean }
+interface StatementSummary { closing_date?:string; due_date?:string; format?: string; issuer: string; year: number; month: number; purchases: string | null; previous_balance: string | null; amount_due: string | null; recognized_credits: string; recognized_payments: string; totals_match: boolean | null; requires_reconciliation: boolean }
 interface Rule { id: string; merchant: string; description: string }
 const auth = useAuthStore(), route = useRoute(), router = useRouter();
 const draftOwner = auth.user?.id || '', draftFamily = auth.currentFamilyId || '';
@@ -130,7 +130,8 @@ async function preview() {
 }
 function applyPreview(data: any) {
   restoringDraft.value = true;
-    rows.value = data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.refunded_in_statement, import_installment: source.value === 'card' && !!row.installment_info, import_subscription: !!row.subscription_info?.matching_id, subscription_frequency: row.subscription_info?.frequency || 'MONTHLY', category_id: row.category_id || row.subscription_info?.category_id || null, remember: false }));
+  detectedCreditStatement.value = !!data.credit_statement || !!data.statement;
+    rows.value = data.rows.map((row: Row) => ({ ...row, detectedType: !!row.type, suggestedCategory: row.category_id, type: row.type || '', selected: !row.blocked && !row.duplicate && !row.possible_duplicate && !row.refunded_in_statement, import_installment: !!row.installment_info, import_subscription: !!row.subscription_info?.matching_id, subscription_frequency: row.subscription_info?.frequency || 'MONTHLY', category_id: row.category_id || row.subscription_info?.category_id || null, remember: false }));
     for (const row of rows.value) {
       if (row.category_id && !availableCategories(row).some(c => c.id === row.category_id)) row.category_id = null;
       if (!row.classification_explicit) row.classification = categories.value.find(c => c.id === row.category_id)?.classification || row.classification || 'OUTRO';
@@ -276,16 +277,30 @@ function changeType(row: Row) {
   row.category_id = availableCategories(row).some(c => c.id === row.suggestedCategory) ? row.suggestedCategory : null;
   reviewed.value = false;
 }
+const destinationDialog = ref<HTMLDialogElement | null>(null);
+const finalSource = ref<'bank' | 'card'>('bank'), finalAccount = ref(''), finalCard = ref(''), finalMonth = ref('');
+const detectedCreditStatement = ref(false);
+watch([finalSource, finalCard], () => {
+  const card = cards.value.find(c => c.id === finalCard.value);
+  if (finalSource.value === 'card' && card?.account_id) finalAccount.value = card.account_id;
+});
+const finalValid = computed(() => !!finalAccount.value && (finalSource.value !== 'card' || (!!finalCard.value && /^20\d{2}-(0[1-9]|1[0-2])$/.test(finalMonth.value))) && !(detectedCreditStatement.value && finalSource.value !== 'card'));
+async function openDestination() {
+  error.value = '';
+  finalSource.value = detectedCreditStatement.value || source.value === 'card' ? 'card' : 'bank';
+  finalAccount.value = accountId.value; finalCard.value = cardId.value; finalMonth.value = statement.value ? `${statement.value.year}-${String(statement.value.month).padStart(2,'0')}` : referenceMonth.value;
+  await nextTick(); destinationDialog.value?.showModal();
+}
 async function confirmImport() {
-  if (saving.value || !reviewed.value || !selected.value.length || unresolved.value || statement.value?.totals_match === false || (statement.value?.requires_reconciliation && !reconciliationReviewed.value)) return;
+  if (!finalValid.value || saving.value || !reviewed.value || !selected.value.length || unresolved.value || statement.value?.totals_match === false || (statement.value?.requires_reconciliation && !reconciliationReviewed.value)) return;
   saving.value = true; error.value = '';
   try {
     if (!await flushDraft()) { error.value = 'Sincronize ou reabra o rascunho antes de concluir a importação.'; return; }
     await renewDraftToken();
     const completedId = draftId.value;
-    const res = await api.post('/imports/confirm', { ...(draftId.value ? { draft_id: draftId.value, draft_revision: draftRevision.value } : {}), preview_token: token.value, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, classification: row.classification || 'OUTRO', classification_explicit: !!row.classification_explicit, remember: row.remember, import_installment: !!row.import_installment, import_subscription: !!row.import_subscription, subscription_frequency: row.subscription_frequency || 'MONTHLY' })) });
+    const res = await api.post('/imports/confirm', { ...(draftId.value ? { draft_id: draftId.value, draft_revision: draftRevision.value } : {}), preview_token: token.value, destination: { account_id: finalAccount.value, card_id: finalSource.value === 'card' ? finalCard.value : null, invoice_month: finalSource.value === 'card' ? finalMonth.value : null }, reviewed: true, reconciliation_reviewed: reconciliationReviewed.value, entries: selected.value.map(row => ({ index: row.index, description: row.description, type: row.type, category_id: row.category_id || null, classification: row.classification || 'OUTRO', classification_explicit: !!row.classification_explicit, remember: row.remember, import_installment: finalSource.value === 'card' && !!row.import_installment, import_subscription: finalSource.value === 'card' && !!row.import_subscription, subscription_frequency: row.subscription_frequency || 'MONTHLY' })) });
     if (completedId) draftJournal(draftOwner, draftFamily, completedId).remove();
-    result.value = res.data; reset(); await router.replace({ query: {} }); await loadDrafts(); file.value = null; if (fileInput.value) fileInput.value.value = '';
+    destinationDialog.value?.close(); result.value = res.data; reset(); await router.replace({ query: {} }); await loadDrafts(); file.value = null; if (fileInput.value) fileInput.value.value = '';
     await loadRules().catch(() => feedback.notify('Lançamentos salvos. Não foi possível atualizar a lista de regras agora.'));
   } catch (err: any) { error.value = apiErrorMessage(err, draftConflict.value ? 'O rascunho mudou em outra aba. Reabra-o antes de importar.' : 'Não foi possível salvar a importação. Confira os lançamentos antes de tentar novamente.'); }
   finally { saving.value = false; }
@@ -344,19 +359,34 @@ async function removeRule(rule: Rule) {
           <div><label :for="`import-category-${row.index}`">Categoria</label><select :id="`import-category-${row.index}`" v-model="row.category_id" :disabled="row.blocked || row.duplicate || saving" @change="changeCategory(row)"><option :value="null">Sem categoria</option><option v-for="category in availableCategories(row)" :key="category.id" :value="category.id">{{ category.name }}</option></select></div>
           <div v-if="row.type === 'DESPESA'"><label :for="`import-classification-${row.index}`">Classificação</label><select :id="`import-classification-${row.index}`" v-model="row.classification" :disabled="row.blocked || row.duplicate || saving" @change="row.classification_explicit = true; row.remember = true; reviewed = false"><option v-for="(name,value) in classifications" :key="value" :value="value">{{ name }}</option></select></div>
         </div>
-        <label v-if="row.installment_info && source === 'card' && !row.duplicate" class="import-check"><input v-model="row.import_installment" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.installment_info.matching_plan_id ? 'Atualizar o parcelamento existente' : 'Criar acompanhamento deste parcelamento' }} · parcela {{ row.installment_info.number }}/{{ row.installment_info.count }}. Somente esta parcela e as futuras serão acompanhadas; valores futuros são estimados pelo valor desta parcela. Escolha uma categoria para criar o plano.</span></label>
+        <label v-if="row.installment_info && (source === 'card' || detectedCreditStatement) && !row.duplicate" class="import-check"><input v-model="row.import_installment" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.installment_info.matching_plan_id ? 'Atualizar o parcelamento existente' : 'Criar acompanhamento deste parcelamento' }} · parcela {{ row.installment_info.number }}/{{ row.installment_info.count }}. Somente esta parcela e as futuras serão acompanhadas; valores futuros são estimados pelo valor desta parcela. Escolha uma categoria para criar o plano.</span></label>
         <div v-if="row.subscription_info && !row.blocked && !row.duplicate" class="import-statement-summary"><p>{{ row.subscription_info.reason }}</p><label class="import-check"><input v-model="row.import_subscription" type="checkbox" :disabled="saving" @change="reviewed = false" /><span>{{ row.subscription_info.matching_id ? 'Vincular esta cobrança à assinatura existente e atualizar o próximo ciclo' : 'Acompanhar esta compra como assinatura' }}. A cobrança será lançada uma vez; ciclos futuros ficam previstos em Assinaturas.</span></label><div v-if="row.import_subscription"><label :for="`subscription-frequency-${row.index}`">Frequência confirmada</label><select :id="`subscription-frequency-${row.index}`" v-model="row.subscription_frequency" class="w-full border rounded-lg p-3" @change="reviewed = false"><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual</option><option value="WEEKLY">Semanal</option></select></div></div>
         <p v-if="row.warning && !row.import_installment" class="import-warning">{{ row.warning }}</p>
         <label v-if="!row.blocked && !row.duplicate" class="import-check"><input v-model="row.remember" type="checkbox" :disabled="saving" /><span>Lembrar este nome e categoria para “{{ rulePattern(row) }}” nas próximas importações deste espaço.</span></label>
       </article></details>
       <section v-if="informational.length" class="import-statement-summary" aria-label="Pagamentos e créditos do extrato"><h3>Pagamentos e créditos reconhecidos</h3><p>Estas movimentações explicam o saldo da fatura e não serão registradas como novas despesas. Confira os pagamentos em Faturas para evitar descontar duas vezes o dinheiro da conta.</p><div v-for="row in informational" :key="row.index" class="import-row-top"><span>{{ formatDateBR(row.date) }} · {{ row.original_description }}</span><strong>{{ formatBRL(Number(row.amount)) }}</strong></div><RouterLink to="/invoices" class="underline">Conferir minhas faturas</RouterLink></section>
-      <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída, nome e a categoria dos parcelamentos e assinaturas selecionados.</p><label v-if="statement?.requires_reconciliation" class="import-check"><input v-model="reconciliationReviewed" type="checkbox" :disabled="saving" /><span>Entendi que pagamentos, estornos e saldo anterior não serão lançados automaticamente. Vou conciliá-los em Faturas para que o saldo no Prumo reflita o banco.</span></label><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length || statement?.totals_match === false || (!!statement?.requires_reconciliation && !reconciliationReviewed)" @click="confirmImport">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
+      <div class="import-confirm"><h3>{{ selected.length }} lançamentos selecionados</h3><p>Entradas: <strong>{{ formatBRL(totals.income / 100) }}</strong> · Saídas: <strong>{{ formatBRL(totals.expense / 100) }}</strong></p><p v-if="unresolved" class="import-warning">Defina entrada/saída, nome e a categoria dos parcelamentos e assinaturas selecionados.</p><label v-if="statement?.requires_reconciliation" class="import-check"><input v-model="reconciliationReviewed" type="checkbox" :disabled="saving" /><span>Entendi que pagamentos, estornos e saldo anterior não serão lançados automaticamente. Vou conciliá-los em Faturas para que o saldo no Prumo reflita o banco.</span></label><label class="import-check"><input v-model="reviewed" type="checkbox" :disabled="saving" /><span>Conferi as datas, valores, nomes e duplicidades com o arquivo original.</span></label><button type="button" class="ui-button primary" :disabled="saving || !reviewed || unresolved || !selected.length || statement?.totals_match === false || (!!statement?.requires_reconciliation && !reconciliationReviewed)" @click="openDestination">{{ saving ? 'Salvando…' : `Salvar ${selected.length} lançamentos conferidos` }}</button></div>
     </section>
+    <dialog ref="destinationDialog" class="import-destination" aria-labelledby="destination-title" @cancel="!saving || $event.preventDefault()">
+      <h2 id="destination-title">Confirmar destino dos lançamentos</h2>
+      <p>{{ selected.length }} lançamentos · saídas {{ formatBRL(totals.expense / 100) }} · entradas {{ formatBRL(totals.income / 100) }}. Confira onde serão registrados antes de salvar.</p>
+      <div class="import-fields">
+        <div><label for="final-source">Destino</label><select id="final-source" v-model="finalSource" :disabled="saving"><option value="bank">Pela conta bancária</option><option value="card">Fatura de cartão de crédito</option></select></div>
+        <div v-if="finalSource === 'card'"><label for="final-card">Cartão</label><select id="final-card" v-model="finalCard" :disabled="saving"><option v-for="c in creditCards" :key="c.id" :value="c.id">{{ c.name }}{{ c.last_digits ? ' · final ' + c.last_digits : '' }}</option></select></div>
+        <div><label for="final-account">Conta vinculada</label><select id="final-account" v-model="finalAccount" :disabled="saving || (finalSource === 'card' && !!cards.find(c => c.id === finalCard)?.account_id)"><option v-for="a in liquidAccounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></div>
+        <div v-if="finalSource === 'card'"><label for="final-month">Mês de referência da fatura</label><input id="final-month" v-model="finalMonth" type="month" :disabled="saving" /><p class="field-help">Todas as compras selecionadas entrarão nesta fatura. As parcelas seguintes vão para as próximas referências.</p></div>
+      </div>
+      <p v-if="statement?.closing_date">Fechamento informado no arquivo: {{ formatDateBR(statement.closing_date) }}. Vencimento: {{ statement.due_date ? formatDateBR(statement.due_date) : 'conforme cartão' }}. Essas datas são preservadas mesmo quando o mês de referência é diferente.</p>
+      <p v-if="detectedCreditStatement && finalSource !== 'card'" role="alert">Este arquivo foi identificado como fatura: escolha um cartão de crédito.</p>
+      <p v-if="error" role="alert">{{ error }}</p>
+      <div class="flex flex-wrap justify-end gap-3"><button class="ui-button secondary" :disabled="saving" @click="destinationDialog?.close()">Voltar à revisão</button><button class="ui-button primary" :disabled="saving || !finalValid" @click="confirmImport">{{ saving ? 'Salvando…' : 'Confirmar destino e importar' }}</button></div>
+    </dialog>
     <details v-if="rules.length && !token" class="import-rules"><summary>Regras aprendidas neste espaço ({{ rules.length }})</summary><p>Você pode esquecer uma regra para voltar a usar o nome original nas próximas importações.</p><div v-for="rule in rules" :key="rule.id" class="import-rule"><span>{{ rule.merchant }} <ArrowRight :size="16" /> <strong>{{ rule.description }}</strong></span><button type="button" class="icon-button" :aria-label="`Esquecer regra ${rule.description}`" @click="removeRule(rule)"><Trash2 :size="18" /></button></div></details>
   </div>
 </template>
 
 <style scoped>
+.import-destination { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 28px; border: 1px solid var(--line); border-radius: 20px; color: var(--ink); } .import-destination[open] { display: grid; gap: 22px; } .import-destination::backdrop { background: rgb(9 38 33 / .55); }
 .import-page { display: grid; gap: 28px; max-width: 1200px; }.import-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--accent); margin-bottom: 10px; }.import-intro { color: var(--muted); margin-top: 12px; }
 .import-source, .import-confirm { display: grid; gap: 20px; padding: 28px; background: white; border: 1px solid var(--line); border-radius: 18px; }
 .import-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; }.import-fields > div { min-width: 0; }.import-fields label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }.import-fields input, .import-fields select { width: 100%; min-height: 48px; border: 1px solid var(--line); background: white; border-radius: 10px; padding: 10px; font-size: 16px; }
